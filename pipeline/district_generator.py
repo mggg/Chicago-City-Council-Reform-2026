@@ -43,7 +43,7 @@ def generate_districts(config):
     epsilon = config.get("epsilon", 0.05)
 
     # Import data
-    geodata_path = Path(config["kc_geodata_path"])
+    geodata_path = Path(config["geodata_path"])
     gdf = gpd.read_file(geodata_path)
     
     # Data stats

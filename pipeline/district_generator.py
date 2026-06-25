@@ -23,15 +23,16 @@ with open(BL_PATH) as f:
     parameters = json.load(f)
 
 RUN_NAME = parameters["run_name"]
-N_DISTRICTS = parameters["district_configs"][0]["num_districts"]
+N_DISTRICTS = [dict_d["num_districts"] for dict_d in parameters["district_configs"]]
+print(N_DISTRICTS)
+
 N_ITERATIONS = parameters["chain_length"]
 POPULATION_ATTR = parameters["population_column"]
 EPSILON = parameters["epsilon"]
 RNG_SEED = parameters["seed"]
-OUTPUT_FILE = BASE_DIR / f"../{parameters["gerrychain_output_dir"]}/{RUN_NAME}.json"
-OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+
 # print(OUTPUT_FILE)
-TARGET_POPULATION = parameters["target_population"]
+# TARGET_POPULATION = parameters["target_population"]
 # INITIAL_ASSIGNMENT_ATTR = parameters["initial_assignment_attr"]
 TOTAL_SEATS = parameters["total_seats"]
 
@@ -76,6 +77,8 @@ def run_chain(
     target_population: Optional[float] = None,
     initial_assignment_attr: Optional[str] = None,
 ):
+    
+
 
     graph = Graph.from_json(graph_file)
     random.seed(rng_seed)
@@ -124,10 +127,10 @@ def run_chain(
         )
 
     if target_population is None:
-        target_population = sum(initial_partition["population"].values()) / N_DISTRICTS
+        target_population = sum(initial_partition["population"].values()) / n_districts
 
     constraints = [
-        within_percent_of_ideal_population(initial_partition, EPSILON)
+        within_percent_of_ideal_population(initial_partition, epsilon)
     ]
 
     recom_proposal = partial(
@@ -146,8 +149,9 @@ def run_chain(
         total_steps=n_iterations,
     )
 
+
     with jsonlines.open(output_file, "w") as writer:
-        for i, step in enumerate(chain):
+        for i, step in enumerate(chain.with_progress_bar()):
             if step is None:
                 continue
             writer.write(
@@ -159,12 +163,19 @@ def run_chain(
 
 
 if __name__ == "__main__":
-    run_chain(
-        graph_file=GRAPH_PATH,
-        n_districts=N_DISTRICTS,
-        n_iterations=N_ITERATIONS,
-        population_attr=POPULATION_ATTR,
-        epsilon=EPSILON,
-        rng_seed=RNG_SEED,
-        output_file=OUTPUT_FILE
-)
+
+    for n_district in N_DISTRICTS:
+        print(f"Starting District: {n_district}")
+        output_file = f"../{parameters["gerrychain_output_dir"]}/{RUN_NAME}_{n_district}.json"
+        OUTPUT_FILE = BASE_DIR / output_file
+        OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        run_chain(
+            graph_file=GRAPH_PATH,
+            n_districts=n_district,
+            n_iterations=N_ITERATIONS,
+            population_attr=POPULATION_ATTR,
+            epsilon=EPSILON,
+            rng_seed=RNG_SEED,
+            output_file=OUTPUT_FILE
+        )
+        print(f"Finishing District: {n_district}")

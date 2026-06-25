@@ -16,12 +16,11 @@
 
   "epsilon": 0.05,
 
-  "initial_assignment_attr": "None",
-
-  "target_population": "None",
-
 "district_configs": [
-  { "num_districts": 4, "winners": 3 }
+    { "num_districts": 12, "winners": 3 },
+    { "num_districts": 6, "winners": 3 },
+  { "num_districts": 4, "winners": 3 },
+  { "num_districts": 3, "winners": 3 }
 ],
 
   "turnout": { "A": 0.15, "B": 0.15},

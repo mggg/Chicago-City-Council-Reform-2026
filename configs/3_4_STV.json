@@ -16,9 +16,14 @@
 
   "epsilon": 0.05,
 
-"district_configs": [
-    { "num_districts": 3, "winners": 3 }
-],
+  "voting_rules": [
+    "STV",
+    "BlockPlurality"
+  ],
+
+  "district_configs": [
+      { "num_districts": 3, "winners": 3 }
+  ],
 
   "turnout": { "A": 0.15, "B": 0.15},
 

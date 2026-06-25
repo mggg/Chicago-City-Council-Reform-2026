@@ -1,10 +1,6 @@
-#!/usr/bin/env python3
 """
 Kansas City VTDs Data Generator
-Generates geopackage of VTDs for Kansas City using spatial join + clip
-
-Usage:
-    python data_generator.py
+Generates geopackage of VTDs for Kansas City using spatial join and clip
 """
 
 import geopandas as gpd
@@ -44,19 +40,11 @@ def load_data(gpkg_path, kc_boundary_geoid="2938000"):
     
     return mo_vtds, kc_boundary
 
-
 def clip_and_filter(mo_vtds, kc_boundary, min_area_pct=0.01):
     """
     Clip VTDs to KC boundary and filter by minimum area
-    
-    Args:
-        mo_vtds: GeoDataFrame of Missouri VTDs
-        kc_boundary: GeoDataFrame of KC boundary
-        min_area_pct: Minimum area as percentage of median original (default: 1%)
-    
-    Returns:
-        kc_vtds_filtered: Filtered GeoDataFrame of VTDs
     """
+    print("\nClipping and filtering...")
     
     # Project to UTM for precision
     proj_crs = mo_vtds.estimate_utm_crs()
@@ -64,11 +52,13 @@ def clip_and_filter(mo_vtds, kc_boundary, min_area_pct=0.01):
     kc_boundary_utm = kc_boundary.to_crs(proj_crs)
     
     # Clip
-    kc_vtds_clip = gpd.clip(mo_vtds_utm, kc_boundary_utm).to_crs(epsg=4326)
+    print("  Clipping VTDs to boundary...")
+    kc_vtds_clip = gpd.clip(mo_vtds_utm, kc_boundary_utm)
     print(f"{len(kc_vtds_clip)} VTDs after clip")
     
-    # Filter by minimum area
-    original_areas = mo_vtds.geometry.area
+    # Filter by minimum area (BEFORE converting CRS)
+    print("  Filtering by minimum area...")
+    original_areas = mo_vtds_utm.geometry.area
     min_area = original_areas.median() * min_area_pct
     
     kc_vtds_filtered = kc_vtds_clip[kc_vtds_clip.geometry.area > min_area].copy()
@@ -76,24 +66,34 @@ def clip_and_filter(mo_vtds, kc_boundary, min_area_pct=0.01):
     print(f"{len(kc_vtds_filtered)} VTDs after filtering")
     print(f"{removed} VTDs removed (area < {min_area_pct*100:.0f}%)")
     
+    # Convert to EPSG:4326 AFTER filtering
+    kc_vtds_filtered = kc_vtds_filtered.to_crs(epsg=4326)
+    
+    # Store the projected CRS for later use
+    kc_vtds_filtered.attrs['proj_crs'] = proj_crs
+    
     return kc_vtds_filtered
 
 
 def print_statistics(kc_vtds):
     """
     Print dataset statistics
-    
-    Args:
-        kc_vtds: GeoDataFrame of KC VTDs
     """
     print("\n" + "=" * 60)
     print("KANSAS CITY STATISTICS")
     print("=" * 60)
     
-    print(f"\nGeography:")
+    # Use stored projected CRS
+    proj_crs = kc_vtds.attrs.get('proj_crs')
+    if proj_crs:
+        kc_vtds_utm = kc_vtds.to_crs(proj_crs)
+    else:
+        kc_vtds_utm = kc_vtds
+
+    print(f"\n Geography:")
     print(f"  Total VTDs: {len(kc_vtds)}")
-    print(f"  Total area: {kc_vtds.geometry.area.sum() / 1e6:.2f} km²")
-    print(f"  Average area per VTD: {kc_vtds.geometry.area.mean() / 1e6:.4f} km²")
+    print(f"  Total area: {kc_vtds_utm.geometry.area.sum() / 1e6:.2f} km²")
+    print(f"  Average area per VTD: {kc_vtds_utm.geometry.area.mean() / 1e6:.4f} km²")
     
     print(f"\n Total population (total_pop_20):")
     print(f"  Total: {kc_vtds['total_pop_20'].sum():,.0f}")
@@ -122,6 +122,32 @@ def print_statistics(kc_vtds):
     
     print()
 
+def validate_geometries(gdf):
+    """
+    Validate and fix geometries for GerryChain
+    
+    Args:
+        gdf: GeoDataFrame of VTDs
+    
+    Returns:
+        gdf: Validated GeoDataFrame
+    """
+    print("\nValidating geometries...")
+    
+    # Fix invalid geometries
+    invalids = (~gdf.geometry.is_valid).sum()
+    if invalids > 0:
+        print(f"  Fixing {invalids} invalid geometries...")
+        gdf["geometry"] = gdf.geometry.make_valid()
+    
+    # Remove empty geometries
+    empties = gdf.geometry.is_empty.sum()
+    if empties > 0:
+        print(f"  Removing {empties} empty geometries...")
+        gdf = gdf[~gdf.geometry.is_empty].copy()
+    
+    print(f"  ✓ {len(gdf)} valid geometries")
+    return gdf
 
 def export_geojson(kc_vtds, output_path):
     """
@@ -156,6 +182,9 @@ def main():
     
     # Statistics
     print_statistics(kc_vtds_filtered)
+    
+    # Validate geometries
+    kc_vtds_filtered = validate_geometries(kc_vtds_filtered)
     
     # Export
     export_geojson(kc_vtds_filtered, output_path)

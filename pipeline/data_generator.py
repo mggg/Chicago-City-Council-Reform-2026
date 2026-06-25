@@ -193,7 +193,7 @@ def export_geojson(kc_vtds, output_path):
     # Export to GPKG
     kc_vtds.to_file(output_path, driver="GPKG")
 
-def main():
+def generate_data():
     """Main workflow"""
     
     print("=" * 60)
@@ -201,7 +201,7 @@ def main():
     print("=" * 60)
     
     # Paths
-    gpkg_path = "data/BETA_release_packages/mo_districtr_vtd_view_v1.gpkg"
+    gpkg_path = "data/mo_districtr_vtd_view_v1.gpkg"
     output_path = "data/kcmo_districts_vtd.gpkg"
     
     # Load data
@@ -219,5 +219,3 @@ def main():
     # Export
     export_geojson(kc_vtds_filtered, output_path)
 
-if __name__ == "__main__":
-    main()

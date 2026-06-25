@@ -5,6 +5,9 @@ from pathlib import Path
 import json
 from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
+from pipeline.profile_generator import generate_profiles
+from pipeline.simulate_elections import simulate_elections
+from pipeline.data_generator import generate_data
 
 def load_config(config_path: str) -> dict:
     """Load config from JSON file."""
@@ -18,6 +21,11 @@ if __name__ == "__main__":
     print(f"Districts: {config['district_configs']}")
     print(f"Chain length: {config['chain_length']}")
     
+    # Step 0 - Data Generation
+    print("\n=== Running generate_data ===")
+    generate_data()
+    print("=== generate_data complete ===")
+
     # Step 1 — Generate districts
     print("\n=== Running generate_districts ===")
     generate_districts(config)
@@ -27,3 +35,11 @@ if __name__ == "__main__":
     print("\n=== Running generate_settings ===")
     generate_settings(config)
     print("=== generate_settings complete ===")
+
+    # Step 3 - Profile Generator
+    print("\n=== Running Profile Generations ===")
+    generate_profiles(config)
+
+    # Step 4 - Simulate Elections
+    print("\n=== Running Election Simulations ===")
+    simulate_elections(config)

@@ -7,6 +7,28 @@ import geopandas as gpd
 import pandas as pd
 import os
 from pathlib import Path
+from shapely.ops import unary_union
+
+
+def _keep_polygonal(geom):
+    """
+    Reduce a geometry to its polygonal part only.
+
+    Clipping can produce GeometryCollections (a Polygon plus stray
+    LineStrings/Points along the clip boundary). GerryChain cannot build a
+    boundary from those, so we drop the non-polygonal pieces and keep only
+    the Polygon/MultiPolygon content. Returns None if nothing polygonal
+    remains.
+    """
+    if geom is None or geom.is_empty:
+        return None
+    if geom.geom_type in ("Polygon", "MultiPolygon"):
+        return geom
+    if geom.geom_type == "GeometryCollection":
+        polys = [g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
+        return unary_union(polys) if polys else None
+    # Pure LineString / Point geometries are not usable as VTD areas
+    return None
 
 
 def load_data(gpkg_path, kc_boundary_geoid="2938000"):
@@ -139,13 +161,21 @@ def validate_geometries(gdf):
     if invalids > 0:
         print(f"  Fixing {invalids} invalid geometries...")
         gdf["geometry"] = gdf.geometry.make_valid()
-    
-    # Remove empty geometries
-    empties = gdf.geometry.is_empty.sum()
-    if empties > 0:
-        print(f"  Removing {empties} empty geometries...")
-        gdf = gdf[~gdf.geometry.is_empty].copy()
-    
+
+    # Keep only the polygonal part of each geometry. Clipping can leave
+    # GeometryCollections (polygon + stray lines/points) that break
+    # GerryChain's boundary computation.
+    collections = (gdf.geometry.geom_type == "GeometryCollection").sum()
+    if collections > 0:
+        print(f"  Reducing {collections} GeometryCollections to polygons...")
+        gdf["geometry"] = gdf.geometry.apply(_keep_polygonal)
+
+    # Remove empty / null geometries (None is NOT caught by is_empty)
+    bad = gdf.geometry.isna() | gdf.geometry.is_empty
+    if bad.sum() > 0:
+        print(f"  Removing {bad.sum()} empty/null geometries...")
+        gdf = gdf[~bad].copy()
+
     print(f"  ✓ {len(gdf)} valid geometries")
     return gdf
 

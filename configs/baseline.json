@@ -8,7 +8,7 @@
   "population_column": "total_pop_20",
   "pop_of_interest_column": "white_vap_20",
 
-  "chain_length": 50000,
+  "chain_length": 1000,
 
   "num_subsamples": 5,
 
@@ -16,9 +16,14 @@
 
   "epsilon": 0.05,
 
-"district_configs": [
-    { "num_districts": 4, "winners": 3 }
-],
+  "voting_rules": [
+    "STV",
+    "BlockPlurality"
+  ],
+
+  "district_configs": [
+      { "num_districts": 4, "winners": 3 }
+  ],
 
   "turnout": { "A": 0.15, "B": 0.15},
 

@@ -578,6 +578,19 @@ wheels = [
 ]
 
 [[package]]
+name = "joblib-progress"
+version = "1.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f5/65/d6a5a6b322ffd4319bb39f22b0c0d71ad89233843764c6f1afc0c4b3b7aa/joblib_progress-1.0.6.tar.gz", hash = "sha256:9b4d97f0ab0fc439be29e8d6ed3114b0a3140f60d709e8a6a6ed3633767e48bc", size = 3119, upload-time = "2024-11-07T13:12:53.455Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/e4/d71e71edc972d534f51cff72fa30edb8b0e5df109b2e5ae67a3985faebb9/joblib_progress-1.0.6-py3-none-any.whl", hash = "sha256:fbd26706cb7fabf8c953dc5ca221ab3daa7e1daff6395e61655244e667bfa5a2", size = 3483, upload-time = "2024-11-07T13:12:52.188Z" },
+]
+
+[[package]]
 name = "jsonlines"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -629,6 +642,7 @@ dependencies = [
     { name = "gerrychain" },
     { name = "gerrytools" },
     { name = "ipykernel" },
+    { name = "joblib-progress" },
     { name = "mapclassify" },
     { name = "matplotlib" },
     { name = "votekit" },
@@ -641,6 +655,7 @@ requires-dist = [
     { name = "gerrychain", specifier = ">=0.3.2" },
     { name = "gerrytools", specifier = ">=1.2.1" },
     { name = "ipykernel", specifier = ">=7.3.0" },
+    { name = "joblib-progress", specifier = ">=1.0.6" },
     { name = "mapclassify", specifier = ">=2.10.0" },
     { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "votekit", specifier = ">=3.4.0" },
@@ -740,6 +755,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/7e/767ae65d2652f720213fd6571c5a945b81352895b78b32f77b27d53af139/mapclassify-2.10.0.tar.gz", hash = "sha256:0d6736a08c0b1e10e6197224ef512951514204706514244bd01aea49fd1442b3", size = 6172445, upload-time = "2025-07-11T21:37:48.844Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/5e/19fb53bd69379498c47bc234ca4d2851cfbca333d6d6929b10251916da25/mapclassify-2.10.0-py3-none-any.whl", hash = "sha256:dc39d6d924d546cdf2573bd587a7770e1a6ded3cb98272d6f0144319038566c5", size = 882230, upload-time = "2025-07-11T21:37:47.401Z" },
+]
+
+[[package]]
+name = "markdown-it-py"
+version = "4.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mdurl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/06/ff/7841249c247aa650a76b9ee4bbaeae59370dc8bfd2f6c01f3630c35eb134/markdown_it_py-4.2.0.tar.gz", hash = "sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49", size = 82454, upload-time = "2026-05-07T12:08:28.36Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl", hash = "sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a", size = 91687, upload-time = "2026-05-07T12:08:27.182Z" },
 ]
 
 [[package]]
@@ -869,6 +896,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/85/f6/8b0e0052787163a1ffc7faec4430962dee3724ad66d3fdbb90070063d5e3/maup-2.0.3.tar.gz", hash = "sha256:2ea3c9f80f0c15a272ab4dfc06ee37ec6ab2aecc8f75143f1c1605dd832d8525", size = 49180, upload-time = "2025-08-20T20:43:31.021Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/34/46/b93d072a5f9b933166c8bd74afbc9f32e7d73bcce54f997d6a6af8b6d5dd/maup-2.0.3-py3-none-any.whl", hash = "sha256:61d7d1a72c7bbd8103d3877c485b0682f4966cc007175145fdc36d392d3c68ff", size = 45162, upload-time = "2025-08-20T20:43:29.591Z" },
+]
+
+[[package]]
+name = "mdurl"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
 ]
 
 [[package]]
@@ -1433,6 +1469,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+]
+
+[[package]]
+name = "rich"
+version = "15.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
 ]
 
 [[package]]

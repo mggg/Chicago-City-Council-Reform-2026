@@ -10,6 +10,7 @@ dependencies = [
     "gerrychain>=0.3.2",
     "gerrytools>=1.2.1",
     "ipykernel>=7.3.0",
+    "joblib-progress>=1.0.6",
     "mapclassify>=2.10.0",
     "matplotlib>=3.11.0",
     "votekit>=3.4.0",

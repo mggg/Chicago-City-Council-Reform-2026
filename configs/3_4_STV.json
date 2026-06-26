@@ -17,8 +17,7 @@
   "epsilon": 0.05,
 
   "voting_rules": [
-    "STV",
-    "BlockPlurality"
+    "STV"
   ],
 
   "district_configs": [

@@ -34,9 +34,9 @@ class DistrictConfig:
     winners: int
 
 
-def _import_voting_rules_from_vote_kit(rules_list: List[str]) -> SimpleNamespace:
+def _import_voting_rules_from_vote_kit(rule_config: dict) -> SimpleNamespace:
     election_lib = importlib.import_module("votekit.elections.election_types")
-    rules = { rule: getattr(election_lib, rule) for rule in rules_list }
+    rules = getattr(election_lib, rule)
     rules = SimpleNamespace(**rules)
     return rules
 
@@ -57,7 +57,7 @@ def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
             winners.append(str(next(iter(s))))
     return winners
 
-def _process_profile(profile_file: str | Path, n_seats: int, voting_rules: List[str]) -> List[str]:
+def _process_profile(profile_file: str | Path, n_seats: int, voting_rule: List[str]) -> List[str]:
     """
     Load a voter profile csv and run an election to determine winners.
     uses stv for multi-seat races and plurality for single-seat races.
@@ -73,7 +73,7 @@ def _process_profile(profile_file: str | Path, n_seats: int, voting_rules: List[
     profile_path = Path(profile_file)
     profile: RankProfile = RankProfile.from_csv(profile_path)
 
-    election_rules = _import_voting_rules_from_vote_kit(voting_rules)
+    election_rules = _import_voting_rules_from_vote_kit(voting_rule)
     results = {}
 
     for rule_type, election in vars(election_rules).items():
@@ -171,12 +171,12 @@ def simulate_elections(config) -> None:
             if ctx is not None:
                 with ctx:
                     results_list = Parallel(n_jobs=n_jobs)(
-                        delayed(_process_profile)(pf, dc.winners, config["voting_rules"]) for pf in all_profile_files
+                        delayed(_process_profile)(pf, dc.winners, config["voting_rule"]) for pf in all_profile_files
                     )
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
                 results_list = Parallel(n_jobs=n_jobs)(
-                    delayed(_process_profile)(pf, dc.winners, config["voting_rules"]) for pf in all_profile_files
+                    delayed(_process_profile)(pf, dc.winners, config["voting_rule"]) for pf in all_profile_files
                 )
 
 

@@ -16,9 +16,9 @@
 
   "epsilon": 0.05,
 
-  "voting_rules": [
-    "Plurality"
-  ],
+  "voting_configs": {
+    "Plurality": { "tiebreak": "random" }
+  },
 
   "district_configs": [
       { "num_districts": 12, "winners": 1 }

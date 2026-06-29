@@ -16,9 +16,9 @@
 
   "epsilon": 0.05,
 
-  "voting_rules": [
-    "STV"
-  ],
+  "voting_configs": {
+    "STV": { "n_seats": 3, "tiebreak": "random" }
+  },
 
   "district_configs": [
       { "num_districts": 4, "winners": 3 }

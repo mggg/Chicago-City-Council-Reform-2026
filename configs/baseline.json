@@ -16,8 +16,8 @@
 
   "epsilon": 0.05,
 
-  "voting_rule": {
-    "STV": {"quota": "droop", "simultaneous": false, "tiebreak": "random" }
+  "voting_configs": {
+    "STV": { "n_seats": 3, "quota": "droop", "simultaneous": false, "tiebreak": "random" }
   },
 
   "district_configs": [

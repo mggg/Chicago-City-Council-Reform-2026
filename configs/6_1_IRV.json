@@ -16,9 +16,9 @@
 
   "epsilon": 0.1,
 
-  "voting_rules": [
-    "IRV"
-  ],
+  "voting_configs": {
+    "IRV": { "tiebreak": "random" }
+  },
 
   "district_configs": [
       { "num_districts": 6, "winners": 1 }

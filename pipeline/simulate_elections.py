@@ -34,10 +34,9 @@ class DistrictConfig:
     winners: int
 
 
-def _import_voting_rules_from_vote_kit(rule_config: dict) -> SimpleNamespace:
+def _import_voting_rules_from_vote_kit(rules: str) -> dict:
     election_lib = importlib.import_module("votekit.elections.election_types")
-    rules = getattr(election_lib, rule)
-    rules = SimpleNamespace(**rules)
+    rules = {rule: getattr(election_lib, rule) for rule in rules}
     return rules
 
 
@@ -57,7 +56,7 @@ def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
             winners.append(str(next(iter(s))))
     return winners
 
-def _process_profile(profile_file: str | Path, n_seats: int, voting_rule: List[str]) -> List[str]:
+def _process_profile(profile_file: str | Path, n_seats: int, voting_configs: dict) -> List[str]:
     """
     Load a voter profile csv and run an election to determine winners.
     uses stv for multi-seat races and plurality for single-seat races.
@@ -73,16 +72,22 @@ def _process_profile(profile_file: str | Path, n_seats: int, voting_rule: List[s
     profile_path = Path(profile_file)
     profile: RankProfile = RankProfile.from_csv(profile_path)
 
-    election_rules = _import_voting_rules_from_vote_kit(voting_rule)
+    # Dynamically obtain election type classes from VoteKit based on the voting
+    # rule configuration provided.
+
+    election_classes = _import_voting_rules_from_vote_kit(voting_configs.keys())
     results = {}
 
-    for rule_type, election in vars(election_rules).items():
-        if n_seats > 1:
-            elected = election(profile, m=n_seats, tiebreak='random').get_elected()
-            results[rule_type] = _candidate_list_from_elected(elected)
-        else:
-            elected = election(profile, tiebreak='random').get_elected()
-            results[rule_type] = _candidate_list_from_elected(elected)
+    # For each election class, run the election simulation
+
+    for rule, election_class in election_classes.items():
+
+        # The parameters used in the class constructors are specified in the
+        # configuration files, under voting_configs. We use keyword argument spreading
+        # to give us flexibility in execution
+
+        elected = election_class(profile, **voting_configs[rule]).get_elected()
+        results[rule] = _candidate_list_from_elected(elected)
 
     return results
 
@@ -171,12 +176,12 @@ def simulate_elections(config) -> None:
             if ctx is not None:
                 with ctx:
                     results_list = Parallel(n_jobs=n_jobs)(
-                        delayed(_process_profile)(pf, dc.winners, config["voting_rule"]) for pf in all_profile_files
+                        delayed(_process_profile)(pf, dc.winners, config["voting_configs"]) for pf in all_profile_files
                     )
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
                 results_list = Parallel(n_jobs=n_jobs)(
-                    delayed(_process_profile)(pf, dc.winners, config["voting_rule"]) for pf in all_profile_files
+                    delayed(_process_profile)(pf, dc.winners, config["voting_configs"]) for pf in all_profile_files
                 )
 
 
@@ -199,3 +204,8 @@ def simulate_elections(config) -> None:
                 )
 
             print(f"[simulate_elections] Wrote: {out_path}")
+
+
+if __name__ == '__main__':
+    from setup import setup_config
+    simulate_elections(setup_config())

@@ -8,8 +8,9 @@ from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
 from pipeline.simulate_elections import simulate_elections
-from pipeline.data_generator import generate_data
 from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs
+from pipeline.data_generator_blocks import generate_data
+from pipeline.summarize_results import summarize_results
 
 def load_all_config_files():
     all_config_files = [load_config(path) for path in glob(f"configs/*.json")]

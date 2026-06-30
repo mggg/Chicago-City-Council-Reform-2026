@@ -6,6 +6,7 @@ import gzip
 from pathlib import Path
 from tqdm import tqdm
 
+
 from functools import partial
 import networkx as nx
 import os
@@ -18,6 +19,7 @@ from gerrychain.updaters import Tally, cut_edges
 from gerrychain.accept import always_accept
 from gerrychain.proposals import recom
 from gerrychain.constraints import within_percent_of_ideal_population
+from gerrychain.tree import bipartition_tree
 
 # required for gerrychain reproducibility
 os.environ.setdefault("PYTHONHASHSEED", "0")
@@ -40,7 +42,11 @@ def generate_districts(config):
     population_column = config["population_column"]
     chain_length = config["chain_length"]
     n_district = config["district_configs"][0]["num_districts"]
-    epsilon = config.get("epsilon", 0.05)
+    seed_epsilon = config["epsilon"]
+    chain_epsilon = 0.05
+
+    print(f"District Number: {n_district}\n")
+    print(f"Voting Rule: {config["voting_configs"]}\n")
 
     # Import data
     geodata_path = Path(config["geodata_path"])
@@ -51,11 +57,10 @@ def generate_districts(config):
     print(f"Number of columns: {gdf.shape[1]}\n")
 
     # Transform geopandas to graph object
-    graph_path = geodata_path.parent / (
-        geodata_path.stem + "_graph.json"
-    )
+    # graph_path = geodata_path.parent / (
+    #     geodata_path.stem + "_graph.json"
+    # )
     graph = Graph.from_geodataframe(gdf)
-    graph.to_json(str(graph_path))
 
     print(f"Number of nodes: {len(graph.nodes)}")
     print(f"Number of edges: {len(graph.edges)}")
@@ -68,6 +73,13 @@ def generate_districts(config):
     )
     for node in graph.nodes:
         graph.nodes[node]["poc_vap_20"] = graph.nodes[node]["total_vap_20"] - graph.nodes[node]["white_vap_20"]
+
+    # Save graph
+    output_dir = Path(f"outputs/{run_name}/graph")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    graph_path = output_dir / f"{run_name}_graph.json"
+    graph.to_json(str(graph_path))
 
     # Step 3 — Output directory
     output_dir = Path(f"outputs/{run_name}/districts")
@@ -88,23 +100,22 @@ def generate_districts(config):
     initial_partition = Partition.from_random_assignment(
         graph=graph,
         n_parts=n_district,
-        epsilon=epsilon,
+        epsilon=seed_epsilon,
         pop_col=population_column,
         updaters=updaters,
         )
 
-    target_population = sum(initial_partition["population"].values()) / n_district
+    target_population = sum(initial_partition["population"].values()) / len(initial_partition)
 
     constraints = [
-        within_percent_of_ideal_population(initial_partition, epsilon)
+        within_percent_of_ideal_population(initial_partition, chain_epsilon)
     ]
 
     recom_proposal = partial(
         recom,
         pop_col=population_column,
         pop_target=target_population,
-        epsilon=epsilon,
-        node_repeats= 2 # added to prevent stucks at chain
+        epsilon=chain_epsilon
     )
 
     # Create the Markov chain

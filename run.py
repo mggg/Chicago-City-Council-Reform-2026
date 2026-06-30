@@ -24,6 +24,7 @@ def load_config(config_path: str) -> dict:
 if __name__ == "__main__":
     # Load config
     configurations = load_all_config_files()
+    # print(configurations[5)
 
     for config in configurations:
         print(f"Run name: {config['run_name']}")
@@ -49,10 +50,10 @@ if __name__ == "__main__":
         print("\n=== Running Profile Generations ===")
         generate_profiles(config)
 
-        # Step 4 - Simulate Elections
-        print("\n=== Running Election Simulations ===")
-        simulate_elections(config)
+    #     # Step 4 - Simulate Elections
+    #     print("\n=== Running Election Simulations ===")
+    #     simulate_elections(config)
 
-        # Step 5 - Summarize Results
-        print("\n=== Summarizing Results ===")
-        summarize_results(config)
+    #     # Step 5 - Summarize Results
+    #     print("\n=== Summarizing Results ===")
+    #     summarize_results(config)

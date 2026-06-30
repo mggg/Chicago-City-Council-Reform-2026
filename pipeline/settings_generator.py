@@ -33,7 +33,7 @@ def _build_district_settings(row, config):
     focal_group = config['focal_group']
     other_group = get_non_focal_group(config)
 
-    prop = float(row[config['pop_of_interest_column']] / row[config['population_column']])
+    prop = float(row[config['pop_of_interest_column']] / row[config['population_vap_column']])
     adjusted_prop = (
         prop * turnout[focal_group]
         / (prop * turnout[focal_group] + (1 - prop) * turnout[other_group])
@@ -44,7 +44,8 @@ def _build_district_settings(row, config):
             other_group: 1 - adjusted_prop,
         },
         config["pop_of_interest_column"]: row[config["pop_of_interest_column"]],
-        config["population_column"]: row[config["population_column"]],
+        # config["population_column"]: row[config["population_column"]],
+        config["population_vap_column"]: row[config["population_vap_column"]],
     }
 
 def generate_settings(config):
@@ -62,7 +63,7 @@ def generate_settings(config):
         bloc_proportions in each file are turnout-adjusted focal group proportions.
     """
     population_data = gpd.read_file(config['geodata_path'])
-    population_data = population_data[[config['pop_of_interest_column'],config['population_column']]]
+    population_data = population_data[[config['pop_of_interest_column'],config['population_vap_column']]]
 
     # subsample evenly spaced plans from the chain
     chain_length = config['chain_length']

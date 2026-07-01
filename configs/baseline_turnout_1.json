@@ -25,7 +25,7 @@
       { "num_districts": 4, "winners": 3 }
   ],
 
-  "turnout": { "A": 1.0, "B": 1.0},
+  "turnout": { "A": 0.54, "B": 0.46},
 
   "num_voters": 1000,
 

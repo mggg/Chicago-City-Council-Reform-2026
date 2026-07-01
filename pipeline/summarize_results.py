@@ -75,7 +75,7 @@ def _focal_population_share(config) -> float:
     gdf = gpd.read_file(geodata_path)
     # vap  = total (voting-age) population across all precincts
     # ivap = population of the group of interest (the focal group) across all precincts
-    vap = sum(gdf[config["population_column"]])
+    vap = sum(gdf[config["population_vap_column"]])
     ivap = sum(gdf[config["pop_of_interest_column"]])
     return ivap / vap  # raw focal-group population proportion
 
@@ -174,7 +174,7 @@ def _district_population(settings_dir: Path, config, plan, district) -> Tuple[An
         settings_dir, config["run_name"], plan=plan, district=district
     )
     settings_data = load_json(settings_path) if settings_path else {}
-    total_vap = settings_data.get(config["population_column"], None)
+    total_vap = settings_data.get(config["population_vap_column"], None)
     total_ivap = settings_data.get(config["pop_of_interest_column"], None)
     return total_vap, total_ivap
 
@@ -262,7 +262,7 @@ def _rows_from_results_file(
                 "simulation_index": idx,
                 "focal_group": focal_group,
                 "focal_seats": focal_seats,
-                config["population_column"]: total_vap,
+                config["population_vap_column"]: total_vap,
                 config["pop_of_interest_column"]: total_ivap,
                 "combined_support": i_cs_turnout,
             })
@@ -847,9 +847,9 @@ def _draw_district_model_bubbles(
             zorder=1,
         )
 
-    ax.set_xlim(0, seats_per_district + 1)
-    ax.set_xticks(range(0, seats_per_district + 2))
-    ax.set_xlabel("Focal seats in district")
+    ax.set_xlim(-1, seats_per_district + 1)
+    ax.set_xticks(range(0, seats_per_district + 1))
+    ax.set_xlabel("Council Seats in District")
 
     # One tick per district, centered on its block of model rows; 1-indexed.
     ax.set_ylim(-0.7, n_rows - 0.3)
@@ -867,7 +867,7 @@ def _district_focal_proportions(df: pd.DataFrame, config) -> Dict[Any, float]:
     sampled plans (focal VAP / total VAP). Rows with missing population are
     ignored; districts with no usable population data are omitted.
     """
-    pop_col = config["population_column"]
+    pop_col = config["population_vap_column"]
     ipop_col = config["pop_of_interest_column"]
     usable = df.dropna(subset=[pop_col, ipop_col])
     if usable.empty:

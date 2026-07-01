@@ -36,7 +36,15 @@ if __name__ == "__main__":
         # print("\n=== Running generate_data ===")
         # generate_data()
         # print("=== generate_data complete ===")
+        # # Step 0 - Data Generation
+        # print("\n=== Running generate_data ===")
+        # generate_data()
+        # print("=== generate_data complete ===")
 
+        # # Step 1 — Generate districts
+        # print("\n=== Running generate_districts ===")
+        # generate_districts(config)
+        # print("=== generate_districts complete ===")
         # # Step 1 — Generate districts
         # print("\n=== Running generate_districts ===")
         # generate_districts(config)
@@ -46,14 +54,21 @@ if __name__ == "__main__":
         # print("\n=== Running generate_settings ===")
         # generate_settings(config)
         # print("=== generate_settings complete ===")
+        # # Step 2 - Settings generator
+        # print("\n=== Running generate_settings ===")
+        # generate_settings(config)
+        # print("=== generate_settings complete ===")
 
         # # Step 3 - Profile Generator
         # print("\n=== Running Profile Generations ===")
         # generate_profiles(config)
+        # # Step 3 - Profile Generator
+        # print("\n=== Running Profile Generations ===")
+        # generate_profiles(config)
 
-        # Step 4 - Simulate Elections
-        print("\n=== Running Election Simulations ===")
-        simulate_elections(config)
+        # # Step 4 - Simulate Elections
+        # print("\n=== Running Election Simulations ===")
+        # simulate_elections(config)
 
         # Step 5 - Summarize Results
         print("\n=== Summarizing Results ===")

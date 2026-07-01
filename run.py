@@ -24,7 +24,7 @@ def load_config(config_path: str) -> dict:
 
 if __name__ == "__main__":
     # Load config
-    configurations = [load_config("configs/6_1.json")]#load_all_config_files()
+    configurations = [load_config("configs/baseline_real_n_voters.json")]#load_all_config_files()
 
     for config in configurations:
         print("==============================================")
@@ -32,24 +32,24 @@ if __name__ == "__main__":
         print(f"Districts: {config['district_configs']}")
         print(f"Chain length: {config['chain_length']}")
         
-        # Step 0 - Data Generation
-        print("\n=== Running generate_data ===")
-        generate_data()
-        print("=== generate_data complete ===")
+        # # Step 0 - Data Generation
+        # print("\n=== Running generate_data ===")
+        # generate_data()
+        # print("=== generate_data complete ===")
 
-        # Step 1 — Generate districts
-        print("\n=== Running generate_districts ===")
-        generate_districts(config)
-        print("=== generate_districts complete ===")
+        # # Step 1 — Generate districts
+        # print("\n=== Running generate_districts ===")
+        # generate_districts(config)
+        # print("=== generate_districts complete ===")
 
-        # Step 2 - Settings generator
-        print("\n=== Running generate_settings ===")
-        generate_settings(config)
-        print("=== generate_settings complete ===")
+        # # Step 2 - Settings generator
+        # print("\n=== Running generate_settings ===")
+        # generate_settings(config)
+        # print("=== generate_settings complete ===")
 
-        # Step 3 - Profile Generator
-        print("\n=== Running Profile Generations ===")
-        generate_profiles(config)
+        # # Step 3 - Profile Generator
+        # print("\n=== Running Profile Generations ===")
+        # generate_profiles(config)
 
         # Step 4 - Simulate Elections
         print("\n=== Running Election Simulations ===")

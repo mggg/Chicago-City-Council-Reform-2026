@@ -41,6 +41,29 @@ def _import_voting_rules_from_vote_kit(rules: str) -> dict:
     return classes
 
 
+def _build_election_plan(voting_configs: dict) -> List[tuple]:
+    """
+    Resolve each configured voting rule to its VoteKit election class and the
+    profile class it requires, once.
+
+    This work only depends on voting_configs (not on any profile), so doing it a
+    single time up front avoids repeating class lookups and signature
+    introspection for every profile file.
+
+    Args:
+        voting_configs: Election and voting settings from the config file.
+
+    Returns:
+        List of (rule, election_class, profile_class) tuples in config order.
+    """
+    plan: List[tuple] = []
+    for rule, election_class in _import_voting_rules_from_vote_kit(voting_configs.keys()).items():
+        profile_types = _required_profile(election_class)
+        profile_class = RankProfile if RankProfile in profile_types else ScoreProfile
+        plan.append((rule, election_class, profile_class))
+    return plan
+
+
 def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
     """
     Flatten votekit election output (iterable of singleton sets) into a list of strings.
@@ -57,42 +80,39 @@ def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
             winners.append(str(next(iter(s))))
     return winners
 
-def _process_profile(profile_file: str | Path, voting_configs: dict) -> List[str]:
+def _process_profile(
+    profile_file: str | Path,
+    election_plan: List[tuple],
+    voting_configs: dict,
+) -> dict:
     """
-    Load a voter profile csv and run an election to determine winners.
-    Dynamically load election classes based on voting_config settings
+    Load a voter profile csv and run each configured election to determine winners.
 
     Args:
         profile_file: Path to the voter profile csv.
-        voting_configs: Election and voting settings specified in configuration files
+        election_plan: Precomputed (rule, election_class, profile_class) tuples
+            from _build_election_plan; avoids per-file class lookup/introspection.
+        voting_configs: Election and voting settings specified in configuration files.
 
     Returns:
         {[type]: [winner_ids]} e.g. { "stv": ["A2", "B1", "B3"] }
 
-    TO-DO: Figure out how to use RankProfile OR ScoreProfile for BlockPlurality if desired. 
+    TO-DO: Figure out how to use RankProfile OR ScoreProfile for BlockPlurality if desired.
         Current default is RankProfile.
     """
     profile_path = Path(profile_file)
-
-    # Dynamically obtain election type classes from VoteKit based on the voting
-    # rule configuration provided.
-
-    election_classes = _import_voting_rules_from_vote_kit(voting_configs.keys())
     results = {}
 
-    # For each election class, run the election simulation
+    # Parse each distinct profile type from the csv at most once and reuse it
+    # across rules that need it (e.g. IRV and Plurality both use RankProfile),
+    # instead of re-reading the same file per rule.
+    profile_cache: dict = {}
 
-    for rule, election_class in election_classes.items():
-
-        # We will use type annotations from the election class object to determine what type
-        # of profile we need to create for object instantiation. If RankProfile is in that
-        # accepted class list, we use it. If not, use ScoreProfile.
-
-        profile_types = _required_profile(election_class)
-
-        profile_class = RankProfile if RankProfile in profile_types else ScoreProfile
-
-        profile = profile_class.from_csv(profile_path)
+    for rule, election_class, profile_class in election_plan:
+        profile = profile_cache.get(profile_class)
+        if profile is None:
+            profile = profile_class.from_csv(profile_path)
+            profile_cache[profile_class] = profile
 
         # The parameters used in the class constructors are specified in the
         # configuration files, under voting_configs. We use keyword argument spreading
@@ -159,6 +179,11 @@ def simulate_elections(config) -> None:
     run_name = str(config["run_name"])
     district_configs = _parse_district_configs(config["district_configs"])
 
+    # Resolve election classes and their required profile types once; the plan
+    # is identical for every profile file, so this avoids repeating the lookup
+    # and signature introspection inside each parallel task.
+    election_plan = _build_election_plan(config["voting_configs"])
+
     modes = ["slate_pl", "slate_bt", "cambridge"]
     # Use all available cores by default. Set SIMULATE_ELECTIONS_N_JOBS=1 to run
     # serially in the main process so breakpoints inside _process_profile are hit
@@ -188,12 +213,12 @@ def simulate_elections(config) -> None:
             if ctx is not None:
                 with ctx:
                     results_list = Parallel(n_jobs=n_jobs)(
-                        delayed(_process_profile)(pf, config["voting_configs"]) for pf in all_profile_files
+                        delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
                     )
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
                 results_list = Parallel(n_jobs=n_jobs)(
-                    delayed(_process_profile)(pf, config["voting_configs"]) for pf in all_profile_files
+                    delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
                 )
 
 

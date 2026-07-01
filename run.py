@@ -66,3 +66,4 @@ if __name__ == "__main__":
     if configurations:
         print("\n=== Building cross-run combined bubble plot ===")
         plot_combined_bubbles_all_runs(configurations[0])
+

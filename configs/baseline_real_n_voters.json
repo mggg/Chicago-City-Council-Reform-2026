@@ -7,7 +7,7 @@
 
   "population_column": "total_pop_20",
   "population_vap_column": "total_vap_20",
-  "pop_of_interest_column": "white_vap_20",
+  "pop_of_interest_column": "poc_vap_20",
 
   "chain_length": 10000,
 
@@ -27,14 +27,14 @@
 
   "turnout": { "A": 0.50, "B": 0.50},
 
-  "num_voters": 20000,
+  "num_voters": 371490,
 
   "slate_to_candidates": {
     "A": ["A1", "A2", "A3", "A4", "A5"],
     "B": ["B1", "B2", "B3", "B4", "B5"]
   },
 
-  "focal_group": "A",
+  "focal_group": "B",
 
   "cohesion_parameters": {
     "A": { "A": 0.6, "B": 0.4 },

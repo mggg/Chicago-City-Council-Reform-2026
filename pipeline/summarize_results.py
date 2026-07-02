@@ -598,7 +598,7 @@ def _draw_method_bubbles(
     i_share = iprop * total_seats
     ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
 
-    ax.set_xlim(0, total_seats + 1)
+    ax.set_xlim(-1, total_seats + 1)
     ax.set_xticks(range(0, total_seats + 2, 1))
     # Only label even seat counts to keep the axis uncluttered.
     ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])

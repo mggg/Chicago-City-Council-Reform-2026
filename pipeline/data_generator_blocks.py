@@ -605,10 +605,16 @@ def export_to_gpkg(kc_blocks, output_path=OUTPUT_PATH):
     }
     kc_export = kc_export.rename(columns=rename_dict)
 
+    # People-of-color (non-white) VAP/CVAP, materialized so configs with
+    # pop_of_interest_column = "poc_vap_20" (focal group B) can read it directly.
+    kc_export["poc_vap_20"] = kc_export["total_vap_20"] - kc_export["white_vap_20"]
+    kc_export["poc_cvap_20"] = kc_export["total_cvap_20"] - kc_export["white_cvap_20"]
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     kc_export.to_file(output_path, layer="kc_blocks", driver="GPKG")
 
-    print(f"Wrote {len(kc_export):,} blocks x {len(export_cols) - 1} columns -> {output_path}")
+    n_cols = len([c for c in kc_export.columns if c != "geometry"])
+    print(f"Wrote {len(kc_export):,} blocks x {n_cols} columns -> {output_path}")
     print("Columns:", [c for c in kc_export.columns if c != "geometry"])
     return kc_export
 

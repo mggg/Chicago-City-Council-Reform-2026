@@ -4,6 +4,8 @@ Run pipeline step by step.
 from pathlib import Path
 from glob import glob
 import json
+import sys
+import gzip
 from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
@@ -204,7 +206,7 @@ def run_pipeline(config):
 
 def main():
 
-    configurations = [load_config("configs/baseline.json")]
+    configurations = [load_config("configs/basic.json")]
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
@@ -213,6 +215,8 @@ def main():
     # Run pipeline for all configurations in configs/
     for config in configurations:
         run_pipeline(config)
+
+    plot_combined_bubbles_all_runs(config)
 
 if __name__ == "__main__":
     

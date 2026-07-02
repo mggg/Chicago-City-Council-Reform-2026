@@ -60,6 +60,16 @@ LEGEND_MAPPING = {
 
 DESIRED_ORDER = ["slate_pl", "slate_bt", "cambridge"]
 
+# Human-readable names for voter groups (blocs/slates). The B bloc/slate/
+# candidates represent POC voters, so any group shown as "B" is displayed as
+# "POC" in figure titles and labels.
+GROUP_LABELS = {"B": "POC"}
+
+
+def _group_label(group: str) -> str:
+    """Display name for a voter group label (e.g. "B" -> "POC")."""
+    return GROUP_LABELS.get(str(group), str(group))
+
 
 # --- Representation baselines --------------------------------------------------
 
@@ -348,8 +358,11 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
         return 0
 
     # Total group width of 0.8 keeps a gap between adjacent seat counts; each
-    # mode's bar is an equal slice of that width.
-    bar_width = 0.8 / n_modes
+    # mode gets an equal slice (slot) of that width. The drawn bar is narrower
+    # than its slot so there is a gap of 50% of the bar width between adjacent
+    # bars at the same seat tick: slot = bar + 0.5*bar, so bar = slot / 1.5.
+    slot_width = 0.8 / n_modes
+    bar_width = slot_width / 1.5
     max_bin_height = 0
 
     for i, mode in enumerate(modes_in_order):
@@ -360,8 +373,8 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
         # One bar per possible focal-seat count in this group.
         counts = seats.value_counts().sort_index()
 
-        # Center the cluster of bars on each integer seat value.
-        offset = (i - (n_modes - 1) / 2) * bar_width
+        # Center the cluster of bars on each integer seat value (slot centers).
+        offset = (i - (n_modes - 1) / 2) * slot_width
 
         ax.bar(
             counts.index + offset,
@@ -370,7 +383,7 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
             edgecolor="gray",
             linewidth=0.5,
             color=MODE_COLORS.get(mode, "xkcd:light gray"),
-            alpha=0.9,
+            alpha=0.5,
             label=mode,
         )
 
@@ -396,7 +409,7 @@ def _style_axes(ax, config, focal_group: str, num_dist, seats_per_district, elm,
     ax.set_xticklabels([str(x) if x % 5 == 0 else "" for x in range(0, total_seats + 1)])
     ax.set_xlabel("Seats")
     ax.set_title(
-        f"Representation for {focal_group}-preferred candidates, "
+        f"Representation for {_group_label(focal_group)}-preferred candidates, "
         f"{num_dist} x {seats_per_district} {elm}"
     )
     ax.tick_params(axis="both", which="major", labelsize=8)
@@ -426,6 +439,7 @@ def _draw_reference_lines(ax, config, iprop: float, i_cs_turnout: float, ylim: f
     point of the figure.
     """
     total_seats = config["total_seats"]
+    focal_label = _group_label(config["focal_group"])
     color_cs = "xkcd:brownish grey"
     color_iprop = "xkcd:purplish brown"
 
@@ -460,7 +474,7 @@ def _draw_reference_lines(ax, config, iprop: float, i_cs_turnout: float, ylim: f
     ax.text(
         i_share + i_share_alignment,
         ylim * 0.90,
-        f"Focal group VAP\n{iprop * 100:.2f}%\n({i_share:.2f} seats)",
+        f"{focal_label} share of VAP\n{iprop * 100:.2f}%\n({i_share:.2f} seats)",
         va="center",
         ha=i_share_ha,
         fontsize=8,
@@ -525,12 +539,15 @@ def plot_representation_histograms(
 # --- Bubble plot ---------------------------------------------------------------
 
 # Marker areas (points^2): the most frequent cell uses BUBBLE_MAX_AREA, and a
-# floor keeps rare cells visible.
-BUBBLE_MAX_AREA = 300
+# floor keeps rare cells visible. The max is kept small enough that the biggest
+# bubble's diameter stays under the grid spacing so adjacent-seat bubbles never
+# overlap: the tightest spacing (x-axis, ~15pt per seat at figsize width 4) puts
+# the largest marker at ~75% of one cell (diameter ~11pt for area 100).
+BUBBLE_MAX_AREA = 100
 BUBBLE_MIN_AREA = 20
 
 # Color of the focal-group proportional-representation reference line (matches
-# the "Focal group VAP" line on the histograms).
+# the "POC share of VAP" line on the histograms).
 PROP_LINE_COLOR = "orangered"
 
 # Single fill color for all bubbles; the voter mode is conveyed by the y-axis row.
@@ -602,7 +619,7 @@ def _draw_method_bubbles(
     ax.set_xticks(range(0, total_seats + 2, 1))
     # Only label even seat counts to keep the axis uncluttered.
     ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])
-    ax.set_xlabel("City Council Seats")
+    ax.set_xlabel("Representation for POC-Preferred Candidates")
 
     ax.set_ylim(-0.5, len(modes_in_order) - 0.5)
     ax.set_yticks(range(len(modes_in_order)))

@@ -11,6 +11,7 @@ from pipeline.simulate_elections import simulate_elections
 from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs
 from pipeline.data_generator_blocks import generate_data
 from pipeline.summarize_results import summarize_results
+from pipeline.utils.profiling import profile_stage, print_profile_summary
 
 def load_all_config_files():
     all_config_files = [load_config(path) for path in glob(f"configs/*.json")]
@@ -127,58 +128,78 @@ def pipeline(config):
     print(f"Chain length: {config['chain_length']}")
     print("==============================================\n")
 
+    run_name = config["run_name"]
+
     # Generate District Map Ensemble
     print("=== Generating District Map Ensemble ===")
-    generate_districts(config)
+    with profile_stage("Generate District Ensemble", run_name):
+        generate_districts(config)
 
     # Generate Settings Files
     print("=== Generating District Settings Files ===")
-    generate_settings(config)
+    with profile_stage("Generate Settings", run_name):
+        generate_settings(config)
 
     # Generate Profiles
     print("=== Generating Preference Profiles ===")
-    generate_profiles(config)
+    with profile_stage("Generate Profiles", run_name):
+        generate_profiles(config)
 
     # Simulate Elections
     print("=== Simulating Elections ===")
-    simulate_elections(config)
+    with profile_stage("Simulate Elections", run_name):
+        simulate_elections(config)
 
     # Results Summary
     print("=== Summarizing Results and Visualizations ===")
-    summarize_results(config)
+    with profile_stage("Summarize Results", run_name):
+        summarize_results(config)
 
 
 def run_pipeline(config):
 
-    run_dir = Path("outputs") / config["run_name"]
+    run_name = config["run_name"]
+    run_dir = Path("outputs") / run_name
     # check if run already exists
     if run_dir.exists():
-        print(f"Run '{config['run_name']}' already exists at {run_dir}")
+        print(f"Run '{run_name}' already exists at {run_dir}")
         if has_valid_district_outputs(config):
             if has_valid_settings(config):
                 if has_valid_profiles(config):
                     if has_valid_election_results(config):
                         if has_valid_summaries(config):
-                            print(f"Run '{config['run_name']}' has valid outputs. Exiting.")
+                            print(f"Run '{run_name}' has valid outputs. Exiting.")
                             sys.exit(0)
                         else:
-                            summarize_results(config)
+                            with profile_stage("Summarize Results", run_name):
+                                summarize_results(config)
                     else:
-                        simulate_elections(config)
-                        summarize_results(config)
+                        with profile_stage("Simulate Elections", run_name):
+                            simulate_elections(config)
+                        with profile_stage("Summarize Results", run_name):
+                            summarize_results(config)
                 else:
-                    generate_profiles(config)
-                    simulate_elections(config)
-                    summarize_results(config)
+                    with profile_stage("Generate Profiles", run_name):
+                        generate_profiles(config)
+                    with profile_stage("Simulate Elections", run_name):
+                        simulate_elections(config)
+                    with profile_stage("Summarize Results", run_name):
+                        summarize_results(config)
             else:
-                generate_settings(config)
-                generate_profiles(config)
-                simulate_elections(config)
-                summarize_results(config)
+                with profile_stage("Generate Settings", run_name):
+                    generate_settings(config)
+                with profile_stage("Generate Profiles", run_name):
+                    generate_profiles(config)
+                with profile_stage("Simulate Elections", run_name):
+                    simulate_elections(config)
+                with profile_stage("Summarize Results", run_name):
+                    summarize_results(config)
         else:
             pipeline(config)
-    else:      
+    else:
         pipeline(config)
+
+    print_profile_summary(run_name)
 
 
 def main():

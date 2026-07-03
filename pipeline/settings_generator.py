@@ -79,7 +79,7 @@ def generate_settings(config):
         settings_folder = Path(f'outputs/{run_name}/settings/{district_num}')
         settings_folder.mkdir(exist_ok=True, parents=True)
 
-        path_to_districting = Path(f'outputs/{run_name}/districts/{run_name}_{district_num}_districts.jsonl.gz')
+        path_to_districting = Path(f'outputs/districts/chain_out/{district_num}/{district_num}_districts.jsonl.gz')
         
         with gzip.open(path_to_districting, mode="rt", encoding="utf-8") as gz_file:
             file = jl.Reader(gz_file)

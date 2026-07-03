@@ -29,14 +29,37 @@ def load_config(config_path: str) -> dict:
 def has_valid_district_outputs(config) -> bool:
     run = config["run_name"]
     n = config["chain_length"]
-    base = Path("outputs") / run / "districts"
+    n_district = config["district_configs"][0]["num_districts"]
+    base = Path("outputs") / "districts" / "chain_out" / f"{n_district}"
+
+
     if not base.is_dir():
-        print("Distrct files do not exist. Running entire pipeline.")
+        print("District files do not exist. Running entire pipeline.")
         return False
+    
+    metadata_file = base / f"{n_district}_districts.json"
+    
+    if not metadata_file.exists():
+        return False
+    
+    with open(metadata_file) as f:
+        config_md = json.load(f)
+
+    keys = [
+        "geodata_path",
+        "population_column",
+        "chain_length",
+        "epsilon",
+        "seed",
+    ]
+
+    if any(config[k] != config_md[k] for k in keys):
+        return None
+    
     for d in config["district_configs"]:
-        f = base / f"{run}_{d['num_districts']}_districts.jsonl.gz"
+        f = base / f"{d['num_districts']}_districts.jsonl.gz"
         if not f.is_file():
-            print(f"{d['num_districts']} distrct configuration files do not exist. Running entire pipeline.")
+            print(f"{d['num_districts']} district configuration files do not exist. Running entire pipeline.")
             return False
         try:
             with gzip.open(f, "rt", encoding="utf-8") as g:
@@ -167,6 +190,7 @@ def run_pipeline(config):
         print(f"Run '{run_name}' already exists at {run_dir}")
         if has_valid_district_outputs(config):
             if has_valid_settings(config):
+                print("[District generator] District files already exist. Omitting District generator.")
                 if has_valid_profiles(config):
                     if has_valid_election_results(config):
                         if False:
@@ -197,6 +221,7 @@ def run_pipeline(config):
                 with profile_stage("Summarize Results", run_name):
                     summarize_results(config)
         else:
+            print("District files do not exist. Running entire pipeline.")
             pipeline(config)
     else:
         pipeline(config)

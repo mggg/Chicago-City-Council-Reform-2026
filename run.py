@@ -74,7 +74,7 @@ def has_valid_profiles(config):
         * config["num_reps"]
     )
     for mode in ["slate_pl", "slate_bt", "cambridge"]:
-        count = sum(1 for f in (base / mode).rglob("*.csv") if f.stat().st_size > 0)
+        count = sum(1 for f in (base / mode).rglob("*.csv.gz") if f.stat().st_size > 0)
         if count != expected_per_mode:
             print(f"Missing valid settings for {mode} mode. Running pipeline from profiles stage.")
             return False
@@ -206,7 +206,7 @@ def run_pipeline(config):
 
 def main():
 
-    configurations = load_all_config_files()
+    configurations = [load_config("testing/configs/basic.json")]
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

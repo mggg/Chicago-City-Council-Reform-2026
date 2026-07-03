@@ -7,6 +7,8 @@ and writes aggregated election results to JSON files.
 """
 
 import json
+import gzip
+import csv
 import inspect
 from glob import glob
 from pathlib import Path
@@ -111,7 +113,9 @@ def _process_profile(
     for rule, election_class, profile_class in election_plan:
         profile = profile_cache.get(profile_class)
         if profile is None:
-            profile = profile_class.from_csv(profile_path)
+            with gzip.open(profile_path, 'rt', encoding='utf-8') as file:
+                profile = profile_class.from_csv(profile_path)
+
             profile_cache[profile_class] = profile
 
         # The parameters used in the class constructors are specified in the
@@ -202,7 +206,7 @@ def simulate_elections(config) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for dc in district_configs:
-            all_profile_files = glob(f"{profile_folder}/{dc.num_districts}/*.csv")
+            all_profile_files = glob(f"{profile_folder}/{dc.num_districts}/*.csv.gz")
 
             desc = f"Running elections for {dc.num_districts} districts, {dc.winners} winner(s), mode={mode}"
             if joblib_progress is not None:
@@ -212,9 +216,11 @@ def simulate_elections(config) -> None:
 
             if ctx is not None:
                 with ctx:
-                    results_list = Parallel(n_jobs=n_jobs)(
-                        delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
-                    )
+                    # results_list = Parallel(n_jobs=n_jobs)(
+                    #     delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                    # )
+                    results_list = [_process_profile(pf, election_plan, config["voting_configs"]) for pf in all_profile_files]
+
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
                 results_list = Parallel(n_jobs=n_jobs)(

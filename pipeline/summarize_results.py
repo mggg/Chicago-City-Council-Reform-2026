@@ -619,7 +619,8 @@ def _draw_method_bubbles(
     ax.set_xticks(range(0, total_seats + 2, 1))
     # Only label even seat counts to keep the axis uncluttered.
     ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])
-    ax.set_xlabel("Representation for POC-Preferred Candidates")
+    # The x-axis is labeled once at the figure level (see _plot_bubbles_for_config)
+    # so the long description doesn't overflow a single narrow subplot.
 
     ax.set_ylim(-0.5, len(modes_in_order) - 0.5)
     ax.set_yticks(range(len(modes_in_order)))
@@ -703,6 +704,7 @@ def _plot_bubbles_for_config(
         figsize=(4 * len(methods), 3),
         sharey=True,
         squeeze=False,
+        layout="constrained",
     )
     axes = axes[0]
 
@@ -719,6 +721,10 @@ def _plot_bubbles_for_config(
         # magnitude), e.g. "4 X 3 STV".
         ax.set_title(f"{num_dist} X {seats_per_district} {method}", fontsize=10)
 
+    # Single figure-level x-axis label, centered across all subplots so the long
+    # description cannot overflow one narrow subplot.
+    fig.supxlabel("Representation for POC-preferred candidates", fontsize=9)
+
     # One shared legend for the proportional-representation line (the same seat
     # share applies to every subplot since it depends only on population).
     prop_handle = Line2D(
@@ -728,13 +734,11 @@ def _plot_bubbles_for_config(
         linewidth=1.2,
         label=f"Proportional representation ({iprop * 100:.1f}%)",
     )
-    # Lay out subplots first, reserving the top strip for the legend so it
-    # sits above the titles instead of overlapping them.
-    fig.tight_layout(rect=[0, 0, 1, 0.90])
+    # "outside" placement makes constrained_layout reserve space for the legend
+    # above the titles rather than overlapping them.
     fig.legend(
         handles=[prop_handle],
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.99),
+        loc="outside upper center",
         fontsize=7,
         frameon=True,
     )

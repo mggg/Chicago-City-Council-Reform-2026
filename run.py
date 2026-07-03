@@ -54,7 +54,7 @@ def has_valid_district_outputs(config) -> bool:
     ]
 
     if any(config[k] != config_md[k] for k in keys):
-        return None
+        return False
     
     for d in config["district_configs"]:
         f = base / f"{d['num_districts']}_districts.jsonl.gz"
@@ -185,35 +185,20 @@ def run_pipeline(config):
 
     run_name = config["run_name"]
     run_dir = Path("outputs") / run_name
-    # check if run already exists
-    if run_dir.exists():
-        print(f"Run '{run_name}' already exists at {run_dir}")
-        if has_valid_district_outputs(config):
-            if has_valid_settings(config):
-                print("[District generator] District files already exist. Omitting District generator.")
-                if has_valid_profiles(config):
-                    if has_valid_election_results(config):
-                        if False:
-                            print(f"Run '{run_name}' has valid outputs. Exiting.")
-                            sys.exit(0)
-                        else:
-                            with profile_stage("Summarize Results", run_name):
-                                summarize_results(config)
-                    else:
-                        with profile_stage("Simulate Elections", run_name):
-                            simulate_elections(config)
-                        with profile_stage("Summarize Results", run_name):
-                            summarize_results(config)
+   
+    if has_valid_district_outputs(config):
+        print("[District generator] District MC already exist. Omitting District generator.")
+        if has_valid_settings(config):
+            if has_valid_profiles(config):
+                if has_valid_election_results(config):
+                    with profile_stage("Summarize Results", run_name):
+                        summarize_results(config)
                 else:
-                    with profile_stage("Generate Profiles", run_name):
-                        generate_profiles(config)
                     with profile_stage("Simulate Elections", run_name):
                         simulate_elections(config)
                     with profile_stage("Summarize Results", run_name):
                         summarize_results(config)
             else:
-                with profile_stage("Generate Settings", run_name):
-                    generate_settings(config)
                 with profile_stage("Generate Profiles", run_name):
                     generate_profiles(config)
                 with profile_stage("Simulate Elections", run_name):
@@ -221,17 +206,26 @@ def run_pipeline(config):
                 with profile_stage("Summarize Results", run_name):
                     summarize_results(config)
         else:
-            print("District files do not exist. Running entire pipeline.")
-            pipeline(config)
+            with profile_stage("Generate Settings", run_name):
+                generate_settings(config)
+            with profile_stage("Generate Profiles", run_name):
+                generate_profiles(config)
+            with profile_stage("Simulate Elections", run_name):
+                simulate_elections(config)
+            with profile_stage("Summarize Results", run_name):
+                summarize_results(config)
     else:
+        print("District files do not exist. Running entire pipeline.")
         pipeline(config)
+    # else:
+    #     pipeline(config)
 
     print_profile_summary(run_name)
 
 
 def main():
 
-    configurations = load_all_config_files("testing/configs")
+    configurations = load_all_config_files()
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

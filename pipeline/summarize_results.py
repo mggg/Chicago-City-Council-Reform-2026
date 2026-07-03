@@ -776,12 +776,124 @@ def _per_mode_distribution_for_run(summary_csv: Path) -> Optional[pd.DataFrame]:
     return counts.groupby(["mode", "focal_seats"], as_index=False)["count"].sum()
 
 
+# def plot_combined_bubbles_all_runs(
+#     config,
+#     output_dir: Optional[Path] = None,
+# ) -> Optional[Path]:
+#     """
+#     Compare every completed run in a single bubble figure.
+
+#     Scans ``outputs/*/summaries/*_summary.csv`` for finished runs and draws one
+#     row per run (y-axis), where bubble area encodes the model-averaged
+#     ("Combined") number of plans that produced each focal-seat count (x-axis). A
+#     dotted line marks the focal group's proportional-representation seat share.
+
+#     Args:
+#         config: Any run's parsed config; used only for the seat-count axis range
+#             and the population-share reference line, which are shared across runs.
+#         output_dir: Where to write the figure. Defaults to
+#             outputs/cross_run_summaries/figures.
+
+#     Returns:
+#         Path to the written figure, or None if no completed runs were found.
+#     """
+#     summary_paths = sorted(Path("outputs").glob("*/summaries/*_summary.csv"))
+
+#     # Each entry: (sort_key, display_label, combined_distribution_df).
+#     runs: List[Tuple[Tuple[int, int, str], str, pd.DataFrame]] = []
+#     for path in summary_paths:
+#         combined = _combined_distribution_for_run(path)
+#         if combined is None:
+#             continue
+#         # run_name doubles as the directory name; read it from the data so the
+#         # label matches the config even if the path layout changes.
+#         df_head = pd.read_csv(path, usecols=["run_name", "num_districts", "seats_per_district"])
+#         label = str(df_head["run_name"].iloc[0])
+#         num_dist = int(df_head["num_districts"].min())
+#         seats_per_district = int(df_head["seats_per_district"].min())
+#         runs.append(((num_dist, seats_per_district, label), label, combined))
+
+#     if not runs:
+#         print("[summarize_results] No completed runs found for cross-run bubble plot.")
+#         return None
+
+#     # Order rows by districting configuration so related systems sit together.
+#     runs.sort(key=lambda r: r[0])
+#     labels = [label for _, label, _ in runs]
+
+#     # Single bubble-area scale across every run so sizes are comparable.
+#     max_count = max(c["count"].max() for _, _, c in runs)
+#     size_scale = (BUBBLE_MAX_AREA - BUBBLE_MIN_AREA) / max_count if max_count > 0 else 0
+
+#     # Seat axis and proportional-representation line are run-independent.
+#     observed_max_seats = max(int(c["focal_seats"].max()) for _, _, c in runs)
+#     total_seats = max(int(config["total_seats"]), observed_max_seats)
+#     iprop = _focal_population_share(config)
+#     i_share = iprop * total_seats
+
+#     fig, ax = plt.subplots(figsize=(8, 0.5 * len(labels) + 2))
+
+#     for y, (_, _, combined) in enumerate(runs):
+#         ax.scatter(
+#             combined["focal_seats"],
+#             [y] * len(combined),
+#             s=BUBBLE_MIN_AREA + combined["count"] * size_scale,
+#             color=BUBBLE_COLOR,
+#             alpha=0.7,
+#             edgecolor="gray",
+#             linewidth=0.5,
+#         )
+
+#     ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
+
+#     ax.set_xlim(0, total_seats + 1)
+#     ax.set_xticks(range(0, total_seats + 2, 1))
+#     ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])
+#     ax.set_xlabel("City Council Seats")
+
+#     ax.set_ylim(-0.5, len(labels) - 0.5)
+#     ax.set_yticks(range(len(labels)))
+#     ax.set_yticklabels([label.replace("_", " ") for label in labels])
+
+#     ax.tick_params(axis="both", which="major", labelsize=8)
+#     for spine in ax.spines.values():
+#         spine.set_linewidth(0.5)
+
+#     ax.set_title("Combined outcomes across runs", fontsize=11)
+
+#     prop_handle = Line2D(
+#         [0], [0],
+#         color=PROP_LINE_COLOR,
+#         linestyle=":",
+#         linewidth=1.2,
+#         label=f"Proportional representation ({iprop * 100:.1f}%)",
+#     )
+#     fig.tight_layout(rect=[0, 0, 1, 0.92])
+#     fig.legend(
+#         handles=[prop_handle],
+#         loc="upper center",
+#         bbox_to_anchor=(0.5, 0.99),
+#         fontsize=7,
+#         frameon=True,
+#     )
+
+#     if output_dir is None:
+#         output_dir = Path("outputs") / "cross_run_summaries" / "figures"
+#     output_dir.mkdir(parents=True, exist_ok=True)
+#     fig_path = output_dir / "combined_bubbles_all_runs.png"
+#     fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+#     plt.close(fig)
+
+#     print(f"[summarize_results] Wrote cross-run figure: {fig_path}")
+#     return fig_path
+
 def plot_combined_bubbles_all_runs(
     config,
     output_dir: Optional[Path] = None,
 ) -> Optional[Path]:
     """
-    Compare every completed run in a single bubble figure.
+    Compare every completed run in a single stacked bubble figure layout
+    resembling image_48ad1f.png.
 
     Scans ``outputs/*/summaries/*_summary.csv`` for finished runs.  Each run
     gets its own subplot stacked vertically, with one y-axis row per voter mode
@@ -914,6 +1026,7 @@ def plot_combined_bubbles_all_runs(
         )
         ax.set_xlabel("Citywide Seats Won", fontsize=8, fontweight="bold")
 
+    # Clean layout and attach global reference line legend at top
     prop_handle = Line2D(
         [0], [0],
         color=PROP_LINE_COLOR,
@@ -943,9 +1056,8 @@ def plot_combined_bubbles_all_runs(
     fig.savefig(fig_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    print(f"[summarize_results] Wrote cross-run figure: {fig_path}")
+    print(f"[summarize_results] Wrote multi-panel cross-run figure to: {fig_path}")
     return fig_path
-
 
 def summarize_results(config) -> Path:
     """

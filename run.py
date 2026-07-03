@@ -15,8 +15,8 @@ from pipeline.data_generator_blocks import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
 
-def load_all_config_files():
-    all_config_files = [load_config(path) for path in glob(f"configs/*.json")]
+def load_all_config_files(config_path="configs"):
+    all_config_files = [load_config(path) for path in glob(f"{config_path}/*.json")]
     return all_config_files
 
 
@@ -230,8 +230,7 @@ def run_pipeline(config):
 
 
 def main():
-    configurations = [load_config("configs/basic.json")]
-    # configurations = load_all_config_files()
+    configurations = load_all_config_files()
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

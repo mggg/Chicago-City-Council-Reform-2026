@@ -217,15 +217,14 @@ def run_pipeline(config):
     else:
         print("District files do not exist. Running entire pipeline.")
         pipeline(config)
-    # else:
-    #     pipeline(config)
+ 
 
     print_profile_summary(run_name)
 
 
 def main():
 
-    configurations = load_all_config_files()
+    configurations = load_all_config_files("testing/configs")
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

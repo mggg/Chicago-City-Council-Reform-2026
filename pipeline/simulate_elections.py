@@ -7,7 +7,11 @@ and writes aggregated election results to JSON files.
 """
 
 import json
+import gzip
+import csv
+import os
 import inspect
+import tempfile
 from glob import glob
 from pathlib import Path
 from joblib import Parallel, delayed
@@ -111,7 +115,26 @@ def _process_profile(
     for rule, election_class, profile_class in election_plan:
         profile = profile_cache.get(profile_class)
         if profile is None:
-            profile = profile_class.from_csv(profile_path)
+
+            # Since neither RankProfile nor ScoreProfile can read compressed
+            # CSV files, we decompress to a unique temp file and delete it
+            # after loading. Using NamedTemporaryFile avoids collisions between
+            # parallel workers processing different profiles concurrently.
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.csv', delete=False, encoding='utf-8'
+            ) as tmp:
+                temp_path = Path(tmp.name)
+                with gzip.open(profile_path, 'rt', encoding='utf-8') as infile:
+                    reader = csv.reader(infile)
+                    writer = csv.writer(tmp)
+                    for row in reader:
+                        writer.writerow(row)
+
+            try:
+                profile = profile_class.from_csv(temp_path)
+            finally:
+                os.remove(temp_path)
+
             profile_cache[profile_class] = profile
 
         # The parameters used in the class constructors are specified in the
@@ -202,7 +225,7 @@ def simulate_elections(config) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for dc in district_configs:
-            all_profile_files = glob(f"{profile_folder}/{dc.num_districts}/*.csv")
+            all_profile_files = glob(f"{profile_folder}/{dc.num_districts}/*.csv.gz")
 
             desc = f"Running elections for {dc.num_districts} districts, {dc.winners} winner(s), mode={mode}"
             if joblib_progress is not None:
@@ -215,6 +238,7 @@ def simulate_elections(config) -> None:
                     results_list = Parallel(n_jobs=n_jobs)(
                         delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
                     )
+
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
                 results_list = Parallel(n_jobs=n_jobs)(

@@ -63,7 +63,7 @@ DESIRED_ORDER = ["slate_pl", "slate_bt", "cambridge"]
 # Human-readable names for voter groups (blocs/slates). The B bloc/slate/
 # candidates represent POC voters, so any group shown as "B" is displayed as
 # "POC" in figure titles and labels.
-GROUP_LABELS = {"B": "POC"}
+GROUP_LABELS = {"C": "POC"}
 
 
 def _group_label(group: str) -> str:
@@ -357,12 +357,11 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
     if n_modes == 0:
         return 0
 
-    # Total group width of 0.8 keeps a gap between adjacent seat counts; each
-    # mode gets an equal slice (slot) of that width. The drawn bar is narrower
-    # than its slot so there is a gap of 50% of the bar width between adjacent
-    # bars at the same seat tick: slot = bar + 0.5*bar, so bar = slot / 1.5.
-    slot_width = 0.8 / n_modes
-    bar_width = slot_width / 1.5
+    # Bars overlap each other by 50%: centres are spaced half a bar width apart.
+    # bar_width=0.3 gives a total group span of 0.6 per tick, leaving a 0.4-wide
+    # gap between adjacent seat groups. Alpha=0.5 keeps all layers visible.
+    bar_width = 0.3
+    step = bar_width / 2
     max_bin_height = 0
 
     for i, mode in enumerate(modes_in_order):
@@ -373,8 +372,7 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
         # One bar per possible focal-seat count in this group.
         counts = seats.value_counts().sort_index()
 
-        # Center the cluster of bars on each integer seat value (slot centers).
-        offset = (i - (n_modes - 1) / 2) * slot_width
+        offset = (i - (n_modes - 1) / 2) * step
 
         ax.bar(
             counts.index + offset,
@@ -407,10 +405,17 @@ def _style_axes(ax, config, focal_group: str, num_dist, seats_per_district, elm,
     ax.set_xticks(range(0, total_seats + 1, 1))
     # Only label multiples of 5 to keep the axis uncluttered.
     ax.set_xticklabels([str(x) if x % 5 == 0 else "" for x in range(0, total_seats + 1)])
-    ax.set_xlabel("Seats")
-    ax.set_title(
-        f"Representation for {_group_label(focal_group)}-preferred candidates, "
-        f"{num_dist} x {seats_per_district} {elm}"
+    ax.set_xlabel("Citywide Seats Won")
+    ax.set_title("Election Outcomes for POC-Preferred Candidates", fontsize=11, fontweight="bold", pad=18)
+    ax.text(
+        0.5, 1.01,
+        str(config["run_name"]),
+        transform=ax.transAxes,
+        fontsize=8,
+        ha="center",
+        va="bottom",
+        color="gray",
+        style="italic",
     )
     ax.tick_params(axis="both", which="major", labelsize=8)
 
@@ -543,15 +548,16 @@ def plot_representation_histograms(
 # bubble's diameter stays under the grid spacing so adjacent-seat bubbles never
 # overlap: the tightest spacing (x-axis, ~15pt per seat at figsize width 4) puts
 # the largest marker at ~75% of one cell (diameter ~11pt for area 100).
-BUBBLE_MAX_AREA = 100
-BUBBLE_MIN_AREA = 20
+BUBBLE_MAX_AREA = 150
+BUBBLE_MIN_AREA = 10
 
 # Color of the focal-group proportional-representation reference line (matches
 # the "POC share of VAP" line on the histograms).
 PROP_LINE_COLOR = "orangered"
 
-# Single fill color for all bubbles; the voter mode is conveyed by the y-axis row.
+# Single fill color for individual-mode bubbles; Combined uses a distinct dark color.
 BUBBLE_COLOR = "#4C72B0"
+COMBINED_BUBBLE_COLOR = "#222222"
 
 
 def _occurrence_counts(df_plan: pd.DataFrame) -> pd.DataFrame:
@@ -602,7 +608,7 @@ def _draw_method_bubbles(
             sub["focal_seats"],
             [y_index[mode]] * len(sub),
             s=BUBBLE_MIN_AREA + sub["count"] * size_scale,
-            color=BUBBLE_COLOR,
+            color=MODE_COLORS.get(mode, BUBBLE_COLOR),
             alpha=0.7,
             edgecolor="gray",
             linewidth=0.5,
@@ -619,7 +625,6 @@ def _draw_method_bubbles(
     ax.set_xticks(range(0, total_seats + 2, 1))
     # Only label even seat counts to keep the axis uncluttered.
     ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])
-    ax.set_xlabel("Representation for POC-Preferred Candidates")
 
     ax.set_ylim(-0.5, len(modes_in_order) - 0.5)
     ax.set_yticks(range(len(modes_in_order)))
@@ -682,14 +687,10 @@ def _plot_bubbles_for_config(
     methods = sorted(counts["election_method"].unique())
 
     present_modes = set(counts["mode"].unique())
-    # Canonical order first, then any modes not anticipated by DESIRED_ORDER,
-    # with the pooled "Combined" row pinned to the top.
-    modes_in_order = [m for m in DESIRED_ORDER if m in present_modes]
-    modes_in_order += [
-        m for m in present_modes if m not in DESIRED_ORDER and m != COMBINED_MODE
-    ]
-    if COMBINED_MODE in present_modes:
-        modes_in_order.append(COMBINED_MODE)
+    # Combined pinned to the bottom (index 0 = lowest y); individual modes above it.
+    individual = [m for m in DESIRED_ORDER if m in present_modes]
+    individual += [m for m in present_modes if m not in DESIRED_ORDER and m != COMBINED_MODE]
+    modes_in_order = ([COMBINED_MODE] if COMBINED_MODE in present_modes else []) + individual
 
     # Scale bubble area from the per-model counts only; the pooled "Combined"
     # row sums those, so including it would shrink every individual bubble.
@@ -700,7 +701,7 @@ def _plot_bubbles_for_config(
     fig, axes = plt.subplots(
         1,
         len(methods),
-        figsize=(4 * len(methods), 3),
+        figsize=(4 * len(methods), 3.5),
         sharey=True,
         squeeze=False,
     )
@@ -715,9 +716,17 @@ def _plot_bubbles_for_config(
             iprop,
             config,
         )
-        # Title includes the districting configuration (district count x
-        # magnitude), e.g. "4 X 3 STV".
-        ax.set_title(f"{num_dist} X {seats_per_district} {method}", fontsize=10)
+        ax.set_xlabel("Citywide Seats Won", fontsize=9)
+
+    # Reserve the top 28% of the figure for title/subtitle/legend, and the
+    # bottom 15% for the x-axis label and tick labels.
+    fig.subplots_adjust(top=0.72, bottom=0.15)
+
+    fig.suptitle(
+        "Election Outcomes for POC-Preferred Candidates",
+        fontsize=11, fontweight="bold", y=0.97,
+    )
+    fig.text(0.5, 0.87, run_name, ha="center", fontsize=8, color="gray", style="italic")
 
     # One shared legend for the proportional-representation line (the same seat
     # share applies to every subplot since it depends only on population).
@@ -728,13 +737,10 @@ def _plot_bubbles_for_config(
         linewidth=1.2,
         label=f"Proportional representation ({iprop * 100:.1f}%)",
     )
-    # Lay out subplots first, reserving the top strip for the legend so it
-    # sits above the titles instead of overlapping them.
-    fig.tight_layout(rect=[0, 0, 1, 0.90])
     fig.legend(
         handles=[prop_handle],
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.99),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.73),
         fontsize=7,
         frameon=True,
     )
@@ -746,420 +752,29 @@ def _plot_bubbles_for_config(
     plt.close(fig)
 
 
-def _district_occurrence_counts(df: pd.DataFrame) -> pd.DataFrame:
+
+
+
+def _per_mode_distribution_for_run(summary_csv: Path) -> Optional[pd.DataFrame]:
     """
-    Count district-level occurrences per
-    (election_method, district_id, mode, focal_seats).
+    Read one run's summary CSV and return the per-mode focal-seat distribution,
+    including the pooled COMBINED_MODE row.
 
-    Unlike _occurrence_counts this keeps results at the individual-district
-    level (no plan-level aggregation) so each district can be its own row.
-    """
-    return (
-        df.groupby(["election_method", "district_id", "mode", "focal_seats"])
-        .size()
-        .reset_index(name="count")
-    )
-
-
-def _district_row_layout(
-    districts: List[Any], modes_in_order: List[str]
-) -> Tuple[Dict[Tuple[Any, str], int], Dict[Any, float], int]:
-    """
-    Assign each (district, voter model) its own y-row so bubbles never overlap.
-
-    Models are stacked within a district, districts are separated by a one-row
-    gap, and rows are numbered top-down (District 1 on top).
-
-    Returns:
-        (y_pos, district_centers, n_rows):
-            y_pos maps (district, mode) -> y coordinate; district_centers maps a
-            district -> the y at the middle of its model rows (for the tick
-            label); n_rows is the total span including gaps.
-    """
-    # Top-to-bottom ordering, with a None placeholder for the gap between groups.
-    ordered: List[Optional[Tuple[Any, str]]] = []
-    for district in districts:
-        for mode in modes_in_order:
-            ordered.append((district, mode))
-        ordered.append(None)  # gap row after each district group
-    if ordered and ordered[-1] is None:
-        ordered.pop()
-
-    n_rows = len(ordered)
-    # Index 0 is the top, so the largest y goes to the first entry.
-    y_pos = {item: (n_rows - 1) - i for i, item in enumerate(ordered) if item is not None}
-    district_centers = {
-        district: sum(y_pos[(district, m)] for m in modes_in_order) / len(modes_in_order)
-        for district in districts
-    }
-    return y_pos, district_centers, n_rows
-
-
-def _draw_district_model_bubbles(
-    ax,
-    method_counts: pd.DataFrame,
-    districts: List[Any],
-    modes_in_order: List[str],
-    y_pos: Dict[Tuple[Any, str], int],
-    district_centers: Dict[Any, float],
-    n_rows: int,
-    size_scale: float,
-    district_props: Dict[Any, float],
-    seats_per_district: int,
-) -> None:
-    """
-    Draw the district-by-seats bubble grid for one election method. Every
-    (district, voter model) pair is its own row, so the colored bubbles are
-    fully separated with margin to spare. Alternate districts get a shaded band
-    (striped-table style), and each district's proportional-representation line
-    is placed by its own focal-group population share.
-    """
-    y_bottom, y_top = -0.7, n_rows - 0.3
-
-    # Vertical extent of each district's block of model rows.
-    ymin_d = {d: min(y_pos[(d, m)] for m in modes_in_order) for d in districts}
-    ymax_d = {d: max(y_pos[(d, m)] for m in modes_in_order) for d in districts}
-
-    # Zebra shading: districts run top-to-bottom; split adjacent groups at the
-    # midpoint of the gap between them so the stripes are contiguous.
-    for i, d in enumerate(districts):
-        upper = y_top if i == 0 else (ymin_d[districts[i - 1]] + ymax_d[d]) / 2
-        lower = y_bottom if i == len(districts) - 1 else (ymin_d[d] + ymax_d[districts[i + 1]]) / 2
-        if i % 2 == 1:
-            ax.axhspan(lower, upper, color="0.93", zorder=-1)
-
-    # Faint dotted guide lines rising from each integer seat tick.
-    for x in range(0, seats_per_district + 2):
-        ax.axvline(x, color="0.85", linestyle=":", linewidth=0.5, zorder=0)
-
-    for mode in modes_in_order:
-        sub = method_counts[method_counts["mode"] == mode]
-        if sub.empty:
-            continue
-        ax.scatter(
-            sub["focal_seats"],
-            [y_pos[(d, mode)] for d in sub["district_id"]],
-            s=BUBBLE_MIN_AREA + sub["count"] * size_scale,
-            color=MODE_COLORS.get(mode, BUBBLE_COLOR),
-            alpha=0.6,
-            edgecolor="gray",
-            linewidth=0.5,
-            zorder=2,
-        )
-
-    # Per-district proportional-representation line: the district's own focal
-    # population share times its seat count, drawn across just that district's
-    # rows.
-    for d in districts:
-        prop = district_props.get(d)
-        if prop is None:
-            continue
-        x = prop * seats_per_district
-        ax.plot(
-            [x, x],
-            [ymin_d[d] - 0.5, ymax_d[d] + 0.5],
-            color=PROP_LINE_COLOR,
-            linestyle=":",
-            linewidth=1.2,
-            zorder=1,
-        )
-
-    ax.set_xlim(-1, seats_per_district + 1)
-    ax.set_xticks(range(0, seats_per_district + 1))
-    ax.set_xlabel("Council Seats in District")
-
-    # One tick per district, centered on its block of model rows; 1-indexed.
-    ax.set_ylim(-0.7, n_rows - 0.3)
-    ax.set_yticks([district_centers[d] for d in districts])
-    ax.set_yticklabels([f"District {d + 1}" for d in districts])
-
-    ax.tick_params(axis="both", which="major", labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_linewidth(0.5)
-
-
-def _district_focal_proportions(df: pd.DataFrame, config) -> Dict[Any, float]:
-    """
-    Mean focal-group population share for each district id, pooled across the
-    sampled plans (focal VAP / total VAP). Rows with missing population are
-    ignored; districts with no usable population data are omitted.
-    """
-    pop_col = config["population_vap_column"]
-    ipop_col = config["pop_of_interest_column"]
-    usable = df.dropna(subset=[pop_col, ipop_col])
-    if usable.empty:
-        return {}
-    totals = usable.groupby("district_id")[[ipop_col, pop_col]].sum()
-    totals = totals[totals[pop_col] > 0]
-    return (totals[ipop_col] / totals[pop_col]).to_dict()
-
-
-def _plot_district_bubbles_for_config(
-    df: pd.DataFrame,
-    config,
-    iprop: float,
-    figs_dir: Path,
-    run_name: str,
-    num_dist,
-    seats_per_district,
-) -> None:
-    """
-    Single figure for one districting configuration with one subplot per
-    election method. Each district is a y-axis row; bubble area encodes how
-    often that district elected a given number of focal seats, and each voter
-    model is drawn in its own translucent color so overlaps are easy to spot.
-    """
-    counts = _district_occurrence_counts(df)
-    if counts.empty:
-        return
-
-    methods = sorted(counts["election_method"].unique())
-
-    present_modes = set(counts["mode"].unique())
-    modes_in_order = [m for m in DESIRED_ORDER if m in present_modes]
-    modes_in_order += [m for m in present_modes if m not in DESIRED_ORDER]
-
-    districts = sorted(counts["district_id"].unique())
-    district_props = _district_focal_proportions(df, config)
-
-    max_count = int(counts["count"].max())
-    size_scale = (BUBBLE_MAX_AREA - BUBBLE_MIN_AREA) / max_count if max_count > 0 else 0
-
-    # One row per (district, model). Sizing the figure by row count keeps the
-    # row spacing (~ROW_INCHES) comfortably larger than the biggest bubble
-    # diameter, so nothing overlaps.
-    y_pos, district_centers, n_rows = _district_row_layout(districts, modes_in_order)
-    ROW_INCHES = 0.4
-    fig_height = ROW_INCHES * n_rows + 1.8
-
-    fig, axes = plt.subplots(
-        1,
-        len(methods),
-        figsize=(4 * len(methods), fig_height),
-        sharey=True,
-        squeeze=False,
-    )
-    axes = axes[0]
-
-    for ax, method in zip(axes, methods):
-        _draw_district_model_bubbles(
-            ax,
-            counts[counts["election_method"] == method],
-            districts,
-            modes_in_order,
-            y_pos,
-            district_centers,
-            n_rows,
-            size_scale,
-            district_props,
-            int(seats_per_district),
-        )
-        ax.set_title(f"{num_dist} X {seats_per_district} {method}", fontsize=10)
-
-    # Legend: one swatch per voter model plus the proportional-representation line.
-    handles = [
-        Line2D(
-            [0], [0],
-            marker="o",
-            linestyle="",
-            markersize=7,
-            markerfacecolor=MODE_COLORS.get(m, BUBBLE_COLOR),
-            markeredgecolor="gray",
-            alpha=0.5,
-            label=LEGEND_MAPPING.get(m, m),
-        )
-        for m in modes_in_order
-    ]
-    handles.append(
-        Line2D(
-            [0], [0],
-            color=PROP_LINE_COLOR,
-            linestyle=":",
-            linewidth=1.2,
-            label=f"Proportional representation ({iprop * 100:.1f}%)",
-        )
-    )
-    # Reserve a fixed strip (not a fraction) for the legend so it sits just above
-    # the axes regardless of how tall the figure grows with the row count.
-    rect_top = 1 - 0.5 / fig_height
-    fig.tight_layout(rect=[0, 0, 1, rect_top])
-    fig.legend(
-        handles=handles,
-        loc="lower center",
-        bbox_to_anchor=(0.5, rect_top),
-        ncol=len(handles),
-        fontsize=7,
-        frameon=True,
-    )
-
-    fig_path = (
-        figs_dir
-        / f"{run_name}_{num_dist}x{seats_per_district}_district_bubbles_by_model.png"
-    )
-    fig.savefig(fig_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_district_model_bubbles(
-    df: pd.DataFrame,
-    config,
-    focal_group: str,
-    iprop: float,
-    figs_dir: Path,
-    run_name: str,
-) -> None:
-    """
-    One figure per districting configuration showing per-district focal-seat
-    distributions. Each district is a y-axis row and each voter model a
-    translucent color, so the spread (and overlap) across models is visible per
-    district. Operates on the district-level table (not the plan aggregate).
-    """
-    for (num_dist, seats_per_district), config_rows in df.groupby(
-        ["num_districts", "seats_per_district"]
-    ):
-        _plot_district_bubbles_for_config(
-            config_rows,
-            config,
-            iprop,
-            figs_dir,
-            run_name,
-            num_dist,
-            seats_per_district,
-        )
-
-
-def _combined_distribution_for_run(summary_csv: Path) -> Optional[pd.DataFrame]:
-    """
-    Read one run's summary CSV and return its model-averaged ("Combined")
-    focal-seat distribution: a frame with columns ``focal_seats`` and ``count``.
-
-    Returns None for empty/unreadable summaries so callers can skip them.
+    Returns a DataFrame with columns [mode, focal_seats, count], collapsing
+    across election methods and district configurations.  Returns None if the
+    summary is empty or unreadable.
     """
     df = pd.read_csv(summary_csv)
     if df.empty:
         return None
 
     df_plan = aggregate_to_plan_level(df)
-    combined = _occurrence_counts(df_plan)
-    combined = combined[combined["mode"] == COMBINED_MODE]
-    if combined.empty:
+    counts = _occurrence_counts(df_plan)
+    if counts.empty:
         return None
 
-    # A run may contain more than one election method or district config; collapse
-    # them into a single per-run distribution over focal-seat counts.
-    return combined.groupby("focal_seats", as_index=False)["count"].sum()
+    return counts.groupby(["mode", "focal_seats"], as_index=False)["count"].sum()
 
-
-# def plot_combined_bubbles_all_runs(
-#     config,
-#     output_dir: Optional[Path] = None,
-# ) -> Optional[Path]:
-#     """
-#     Compare every completed run in a single bubble figure.
-
-#     Scans ``outputs/*/summaries/*_summary.csv`` for finished runs and draws one
-#     row per run (y-axis), where bubble area encodes the model-averaged
-#     ("Combined") number of plans that produced each focal-seat count (x-axis). A
-#     dotted line marks the focal group's proportional-representation seat share.
-
-#     Args:
-#         config: Any run's parsed config; used only for the seat-count axis range
-#             and the population-share reference line, which are shared across runs.
-#         output_dir: Where to write the figure. Defaults to
-#             outputs/cross_run_summaries/figures.
-
-#     Returns:
-#         Path to the written figure, or None if no completed runs were found.
-#     """
-#     summary_paths = sorted(Path("outputs").glob("*/summaries/*_summary.csv"))
-
-#     # Each entry: (sort_key, display_label, combined_distribution_df).
-#     runs: List[Tuple[Tuple[int, int, str], str, pd.DataFrame]] = []
-#     for path in summary_paths:
-#         combined = _combined_distribution_for_run(path)
-#         if combined is None:
-#             continue
-#         # run_name doubles as the directory name; read it from the data so the
-#         # label matches the config even if the path layout changes.
-#         df_head = pd.read_csv(path, usecols=["run_name", "num_districts", "seats_per_district"])
-#         label = str(df_head["run_name"].iloc[0])
-#         num_dist = int(df_head["num_districts"].min())
-#         seats_per_district = int(df_head["seats_per_district"].min())
-#         runs.append(((num_dist, seats_per_district, label), label, combined))
-
-#     if not runs:
-#         print("[summarize_results] No completed runs found for cross-run bubble plot.")
-#         return None
-
-#     # Order rows by districting configuration so related systems sit together.
-#     runs.sort(key=lambda r: r[0])
-#     labels = [label for _, label, _ in runs]
-
-#     # Single bubble-area scale across every run so sizes are comparable.
-#     max_count = max(c["count"].max() for _, _, c in runs)
-#     size_scale = (BUBBLE_MAX_AREA - BUBBLE_MIN_AREA) / max_count if max_count > 0 else 0
-
-#     # Seat axis and proportional-representation line are run-independent.
-#     observed_max_seats = max(int(c["focal_seats"].max()) for _, _, c in runs)
-#     total_seats = max(int(config["total_seats"]), observed_max_seats)
-#     iprop = _focal_population_share(config)
-#     i_share = iprop * total_seats
-
-#     fig, ax = plt.subplots(figsize=(8, 0.5 * len(labels) + 2))
-
-#     for y, (_, _, combined) in enumerate(runs):
-#         ax.scatter(
-#             combined["focal_seats"],
-#             [y] * len(combined),
-#             s=BUBBLE_MIN_AREA + combined["count"] * size_scale,
-#             color=BUBBLE_COLOR,
-#             alpha=0.7,
-#             edgecolor="gray",
-#             linewidth=0.5,
-#         )
-
-#     ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
-
-#     ax.set_xlim(0, total_seats + 1)
-#     ax.set_xticks(range(0, total_seats + 2, 1))
-#     ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])
-#     ax.set_xlabel("City Council Seats")
-
-#     ax.set_ylim(-0.5, len(labels) - 0.5)
-#     ax.set_yticks(range(len(labels)))
-#     ax.set_yticklabels([label.replace("_", " ") for label in labels])
-
-#     ax.tick_params(axis="both", which="major", labelsize=8)
-#     for spine in ax.spines.values():
-#         spine.set_linewidth(0.5)
-
-#     ax.set_title("Combined outcomes across runs", fontsize=11)
-
-#     prop_handle = Line2D(
-#         [0], [0],
-#         color=PROP_LINE_COLOR,
-#         linestyle=":",
-#         linewidth=1.2,
-#         label=f"Proportional representation ({iprop * 100:.1f}%)",
-#     )
-#     fig.tight_layout(rect=[0, 0, 1, 0.92])
-#     fig.legend(
-#         handles=[prop_handle],
-#         loc="upper center",
-#         bbox_to_anchor=(0.5, 0.99),
-#         fontsize=7,
-#         frameon=True,
-#     )
-
-#     if output_dir is None:
-#         output_dir = Path("outputs") / "cross_run_summaries" / "figures"
-#     output_dir.mkdir(parents=True, exist_ok=True)
-#     fig_path = output_dir / "combined_bubbles_all_runs.png"
-#     fig.savefig(fig_path, dpi=300, bbox_inches="tight")
-#     plt.close(fig)
-
-#     print(f"[summarize_results] Wrote cross-run figure: {fig_path}")
-#     return fig_path
 
 def plot_combined_bubbles_all_runs(
     config,
@@ -1169,114 +784,136 @@ def plot_combined_bubbles_all_runs(
     Compare every completed run in a single stacked bubble figure layout
     resembling image_48ad1f.png.
 
-    Scans ``outputs/*/summaries/*_summary.csv`` for finished runs and draws a
-    vertically stacked panel of subplots (one per run). Each subplot breaks down
-    focal seat distributions by voter model (Plackett-Luce, Bradley-Terry, 
-    Cambridge) and the pooled Combined mode.
+    Scans ``outputs/*/summaries/*_summary.csv`` for finished runs.  Each run
+    gets its own subplot stacked vertically, with one y-axis row per voter mode
+    plus a pooled "Combined" row at the bottom.  Bubble area encodes how many
+    plans produced each focal-seat count (x-axis).  A dotted line marks the
+    focal group's proportional-representation seat share.
+
+    Bubble areas are scaled consistently across all subplots so sizes remain
+    comparable across runs.
+
+    Args:
+        config: Any run's parsed config; used only for the seat-count axis range
+            and the population-share reference line, which are shared across runs.
+        output_dir: Where to write the figure. Defaults to
+            outputs/cross_run_summaries/figures.
+
+    Returns:
+        Path to the written figure, or None if no completed runs were found.
     """
     summary_paths = sorted(Path("outputs").glob("*/summaries/*_summary.csv"))
 
-    # Each entry: (sort_key, display_label, occurrence_counts_df)
     runs: List[Tuple[Tuple[int, int, str], str, pd.DataFrame]] = []
     for path in summary_paths:
-        df = pd.read_csv(path)
-        if df.empty:
+        per_mode = _per_mode_distribution_for_run(path)
+        if per_mode is None:
             continue
-        
-        df_plan = aggregate_to_plan_level(df)
-        counts = _occurrence_counts(df_plan)
-        if counts.empty:
-            continue
-
-        label = str(df["run_name"].iloc[0])
-        num_dist = int(df["num_districts"].min())
-        seats_per_district = int(df["seats_per_district"].min())
-        runs.append(((num_dist, seats_per_district, label), label, counts))
+        df_head = pd.read_csv(path, usecols=["run_name", "num_districts", "seats_per_district"])
+        label = str(df_head["run_name"].iloc[0])
+        num_dist = int(df_head["num_districts"].min())
+        seats_per_district = int(df_head["seats_per_district"].min())
+        runs.append(((num_dist, seats_per_district, label), label, per_mode))
 
     if not runs:
         print("[summarize_results] No completed runs found for cross-run bubble plot.")
         return None
 
-    # Order runs by districting configuration so related systems sit together
-    runs.sort(key=lambda r: r[0])
+    runs.sort(key=lambda r: (not r[1].lower().startswith("basic"), r[0]))
 
-    # Determine global bubble sizing scale across all runs to maintain consistency
-    global_max_count = max(
-        int(counts.loc[counts["mode"] != COMBINED_MODE, "count"].max()) 
-        for _, _, counts in runs if not counts.loc[counts["mode"] != COMBINED_MODE].empty
-    )
-    size_scale = (BUBBLE_MAX_AREA - BUBBLE_MIN_AREA) / global_max_count if global_max_count > 0 else 0
-
-    # Define voter model layout order for the y-axis within each panel
-    modes_display_order = ["slate_pl", "slate_bt", "cambridge", COMBINED_MODE]
-    y_index = {mode: i for i, mode in enumerate(reversed(modes_display_order))}
-
-    # Base metadata parameters for reference lines
-    observed_max_seats = max(int(counts["focal_seats"].max()) for _, _, counts in runs)
-    total_seats = max(int(config["total_seats"]), observed_max_seats)
     iprop = _focal_population_share(config)
+    observed_max_seats = max(int(c["focal_seats"].max()) for _, _, c in runs)
+    total_seats = max(int(config["total_seats"]), observed_max_seats)
     i_share = iprop * total_seats
 
-    # Sizing dynamically based on the number of completed runs found
-    n_runs = len(runs)
-    fig, axes = plt.subplots(
-        n_runs, 1, 
-        figsize=(10, 2.2 * n_runs), 
-        sharex=True, 
-        squeeze=False
-    )
-    axes = axes.flatten()
+    # Row order: individual modes in DESIRED_ORDER, then Combined at the bottom.
+    all_modes: set = set()
+    for _, _, c in runs:
+        all_modes.update(c["mode"].unique())
+    modes_in_order = [m for m in DESIRED_ORDER if m in all_modes]
+    if COMBINED_MODE in all_modes:
+        modes_in_order.append(COMBINED_MODE)
 
-    for idx, (sort_key, label, counts) in enumerate(runs):
-        ax = axes[idx]
-        
-        # Draw horizontal shaded strip background for visual structure
-        ax.axhspan(-0.5, len(modes_display_order) - 0.5, color="#fdfdfd", zorder=-2)
-        
-        # Plot bubbles for each mode group
-        for mode in modes_display_order:
-            sub = counts[counts["mode"] == mode]
+    # ROW_SPACING controls the y-axis gap between adjacent mode rows. At 1.5 data
+    # units and typical figure heights the maximum bubble (BUBBLE_MAX_AREA=100,
+    # diameter ~10pt ≈ 0.14in) stays well clear of neighbouring rows.
+    ROW_SPACING = 1.5
+    COMBINED_GAP = 0.6  # extra separation above the standard row spacing
+    individual_modes = [m for m in modes_in_order if m != COMBINED_MODE]
+    has_combined = COMBINED_MODE in modes_in_order
+
+    y_index: Dict[str, float] = {m: float(i) * ROW_SPACING for i, m in enumerate(individual_modes)}
+    if has_combined:
+        y_index[COMBINED_MODE] = len(individual_modes) * ROW_SPACING + COMBINED_GAP
+
+    n_individual = len(individual_modes)
+    y_top = y_index[COMBINED_MODE] if has_combined else (n_individual - 1) * ROW_SPACING
+    y_tick_positions = [y_index[m] for m in modes_in_order]
+    y_tick_labels = [LEGEND_MAPPING.get(m, m) for m in modes_in_order]
+
+    n_modes = len(modes_in_order)
+    n_runs = len(runs)
+
+    subplot_h = ROW_SPACING * n_modes * 0.35 + 0.8
+    fig_height = subplot_h * n_runs + 0.8
+    fig, axes = plt.subplots(
+        n_runs, 1,
+        figsize=(10, fig_height),
+        gridspec_kw={"hspace": 0.9},
+    )
+    if n_runs == 1:
+        axes = [axes]
+
+    x_tick_step = max(1, total_seats // 10)
+    x_ticks = range(0, total_seats + x_tick_step, x_tick_step)
+
+    for ax, (_, label, per_mode) in zip(axes, runs):
+        for mode in modes_in_order:
+            sub = per_mode[per_mode["mode"] == mode]
             if sub.empty:
                 continue
-                
-            # Determine color choice: distinct colors for models, darker shade for combined
-            color = MODE_COLORS.get(mode, "#2F4F4F") if mode != COMBINED_MODE else "#1c2833"
-            
+            # Scale each row independently: the most-common seat count in this
+            # mode fills BUBBLE_MAX_AREA; the least common fills BUBBLE_MIN_AREA.
+            row_max = sub["count"].max()
+            row_scale = (BUBBLE_MAX_AREA - BUBBLE_MIN_AREA) / row_max if row_max > 0 else 0
+            sizes = BUBBLE_MIN_AREA + sub["count"] * row_scale
+            bubble_color = COMBINED_BUBBLE_COLOR if mode == COMBINED_MODE else MODE_COLORS.get(mode, BUBBLE_COLOR)
             ax.scatter(
                 sub["focal_seats"],
                 [y_index[mode]] * len(sub),
-                s=BUBBLE_MIN_AREA + sub["count"] * size_scale,
-                color=color,
-                alpha=0.75,
-                edgecolor="gray",
-                linewidth=0.5,
-                zorder=2
+                s=sizes,
+                color=bubble_color,
+                alpha=0.7,
+                edgecolor="none",
+                linewidth=0,
             )
 
-        # Draw proportional baseline reference line per subplot panel
-        ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2, zorder=1)
+        ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
 
-        # Style local axes
-        ax.set_xlim(-1, total_seats + 3)
-        ax.set_ylim(-0.5, len(modes_display_order) - 0.5)
-        ax.set_yticks(range(len(modes_display_order)))
-        ax.set_yticklabels([LEGEND_MAPPING.get(m, m) for m in reversed(modes_display_order)], fontsize=9)
-        
-        # Label the target scenario identifier clearly inside each box
-        ax.text(
-            0.02, 0.75, label.replace("_", " ").title(),
-            transform=ax.transAxes, fontsize=11, fontweight="bold", va="top"
-        )
-        
-        ax.set_ylabel("Voter Model", fontsize=9)
+        ax.set_xlim(-1, total_seats + x_tick_step)
+        # Inverted y-axis: y=0 sits below the headroom band reserved for the title.
+        # Scale the headroom with ROW_SPACING so it stays ~one row's worth of space.
+        ax.set_ylim(y_top + ROW_SPACING * 0.5, -ROW_SPACING * 1.5)
+        ax.set_yticks(y_tick_positions)
+        ax.set_yticklabels(y_tick_labels, fontsize=8)
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels([str(x) for x in x_ticks], fontsize=8)
         ax.tick_params(axis="both", which="major", labelsize=8)
         for spine in ax.spines.values():
             spine.set_linewidth(0.5)
 
-    # Set up global bottom x-axis properties
-    axes[-1].set_xticks(range(0, total_seats + 2, 2))
-    axes[-1].set_xticklabels([str(x) for x in range(0, total_seats + 2, 2)])
-    axes[-1].set_xlabel("Citywide Seats Won", fontsize=10, fontweight="bold")
+        # Fixed offset from top-left corner; serif font gives it a distinct style.
+        ax.text(
+            0.01, 0.94,
+            label.replace("_", " "),
+            transform=ax.transAxes,
+            fontsize=10,
+            fontweight="bold",
+            fontfamily="serif",
+            va="top",
+            ha="left",
+        )
+        ax.set_xlabel("Citywide Seats Won", fontsize=8, fontweight="bold")
 
     # Clean layout and attach global reference line legend at top
     prop_handle = Line2D(
@@ -1286,13 +923,18 @@ def plot_combined_bubbles_all_runs(
         linewidth=1.2,
         label=f"Proportional representation ({iprop * 100:.1f}%)",
     )
-    
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    # Reserve 1 inch at the top for the figure title and legend.
+    top_margin = 1 - 1.0 / fig_height
+    fig.subplots_adjust(top=top_margin)
+    fig.suptitle(
+        "Election Outcomes for POC-Preferred Candidates",
+        fontsize=11, fontweight="bold", y=0.99,
+    )
     fig.legend(
         handles=[prop_handle],
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.99),
-        fontsize=8,
+        loc="lower center",
+        bbox_to_anchor=(0.5, top_margin + 0.1 / fig_height),
+        fontsize=7,
         frameon=True,
     )
 
@@ -1345,9 +987,6 @@ def summarize_results(config) -> Path:
     )
 
     plot_representation_bubbles(df_plan, config, focal_group, iprop, figs_dir, run_name)
-
-    # Per-district view: districts on the y-axis, voter models overlaid by color.
-    plot_district_model_bubbles(df, config, focal_group, iprop, figs_dir, run_name)
 
     print(f"[summarize_results] Wrote CSV: {csv_path}")
     print(f"[summarize_results] Figures in: {figs_dir}")

@@ -15,8 +15,8 @@ from pipeline.data_generator_blocks import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
 
-def load_all_config_files(config_path="configs"):
-    all_config_files = [load_config(path) for path in glob(f"{config_path}/*.json")]
+def load_all_config_files(config_dir="configs"):
+    all_config_files = [load_config(path) for path in glob(f"{config_dir}/*.json")]
     return all_config_files
 
 
@@ -97,7 +97,7 @@ def has_valid_profiles(config):
         * config["num_reps"]
     )
     for mode in ["slate_pl", "slate_bt", "cambridge"]:
-        count = sum(1 for f in (base / mode).rglob("*.csv") if f.stat().st_size > 0)
+        count = sum(1 for f in (base / mode).rglob("*.csv.gz") if f.stat().st_size > 0)
         if count != expected_per_mode:
             print(f"Missing valid settings for {mode} mode. Running pipeline from profiles stage.")
             return False
@@ -185,20 +185,14 @@ def run_pipeline(config):
 
     run_name = config["run_name"]
     run_dir = Path("outputs") / run_name
-    # check if run already exists
-    # if run_dir.exists():
-    #     print(f"Run '{run_name}' already exists at {run_dir}")
+   
     if has_valid_district_outputs(config):
         print("[District generator] District MC already exist. Omitting District generator.")
         if has_valid_settings(config):
             if has_valid_profiles(config):
                 if has_valid_election_results(config):
-                    if has_valid_summaries(config):
-                        print(f"Run '{run_name}' has valid outputs. Exiting.")
-                        sys.exit(0)
-                    else:
-                        with profile_stage("Summarize Results", run_name):
-                            summarize_results(config)
+                    with profile_stage("Summarize Results", run_name):
+                        summarize_results(config)
                 else:
                     with profile_stage("Simulate Elections", run_name):
                         simulate_elections(config)
@@ -223,8 +217,7 @@ def run_pipeline(config):
     else:
         print("District files do not exist. Running entire pipeline.")
         pipeline(config)
-    # else:
-    #     pipeline(config)
+ 
 
     print_profile_summary(run_name)
 

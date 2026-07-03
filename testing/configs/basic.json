@@ -18,7 +18,8 @@
   "epsilon":  0.05,
 
   "voting_configs": {
-    "FastSTV": { "n_seats": 3, "tiebreak": "random" }
+    "FastSTV": { "n_seats": 3, "tiebreak": "random" },
+    "Plurality": { "tiebreak": "random" }
   },
 
   "district_configs": [

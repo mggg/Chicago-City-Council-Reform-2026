@@ -9,6 +9,7 @@ and writes aggregated election results to JSON files.
 import json
 import gzip
 import csv
+import os
 import inspect
 from glob import glob
 from pathlib import Path
@@ -103,6 +104,7 @@ def _process_profile(
         Current default is RankProfile.
     """
     profile_path = Path(profile_file)
+    temp_path = Path(profile_file.replace(".gz", ""))
     results = {}
 
     # Parse each distinct profile type from the csv at most once and reuse it
@@ -113,8 +115,22 @@ def _process_profile(
     for rule, election_class, profile_class in election_plan:
         profile = profile_cache.get(profile_class)
         if profile is None:
-            with gzip.open(profile_path, 'rt', encoding='utf-8') as file:
-                profile = profile_class.from_csv(profile_path)
+
+            # Since neither RankProfile or ScoreProfile can read compressed
+            # CSV files, we'll temporarily unpack each profile file into a 
+            # typical CSV for instantation, which we'll then delete.
+            
+            with gzip.open(profile_path, 'rt', encoding='utf-8') as infile, \
+                 open(temp_path, 'w', encoding='utf-8') as outfile:
+                reader = csv.reader(infile)
+                writer = csv.writer(outfile)
+
+                for row in reader:
+                    writer.writerow(row)
+            
+            profile = profile_class.from_csv(temp_path)
+
+            os.remove(temp_path)
 
             profile_cache[profile_class] = profile
 

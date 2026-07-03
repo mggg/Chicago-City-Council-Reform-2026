@@ -1,5 +1,5 @@
 {
-  "run_name": "1K-Profiles-Per-District",
+  "run_name": "1,000 Voter Profiles per District",
 
   "geodata_path": "./data/KC_blocks_vap_cvap.gpkg",
 

@@ -9,7 +9,7 @@
   "population_vap_column": "total_vap_20",
   "pop_of_interest_column": "poc_vap_20",
 
-  "chain_length": 1000,
+  "chain_length": 100,
 
   "num_subsamples": 5,
 
@@ -27,7 +27,7 @@
 
   "turnout": { "W": 0.5, "C": 0.5},
 
-  "num_voters": 10000,
+  "num_voters": 100,
 
   "slate_to_candidates": {
     "W": ["W1", "W2", "W3", "W4", "W5"],
@@ -47,6 +47,6 @@
   },
 
   "num_reps": 10,
-  
+
   "seed": 42
 }

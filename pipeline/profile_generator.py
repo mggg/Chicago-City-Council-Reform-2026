@@ -20,6 +20,7 @@ from pathlib import Path
 from pipeline.utils.helpers import load_json
 import json
 import time
+import gzip
 
 # maps mode name to votekit profile generator function
 generator_name_to_function = {
@@ -56,10 +57,14 @@ def process_settings_file(settings_file, profile_folder, mode, duplicate_indx):
 
     output_file = (
         profile_folder
-        / f"{setting_file_stem.replace('sample_settings', 'profile')}_v{duplicate_indx}.csv"
+        / f"{setting_file_stem.replace('sample_settings', 'profile')}_v{duplicate_indx}.csv.gz"
     )
     profile = generator_name_to_function[mode](config)
-    profile.to_csv(output_file)
+
+    profile_csv = profile.to_csv()
+
+    with gzip.open(output_file, "wt", encoding="utf-8") as file: 
+        writer = file.write(profile_csv)
 
 
 def generate_profiles(config):

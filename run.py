@@ -15,8 +15,8 @@ from pipeline.data_generator_blocks import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
 
-def load_all_config_files():
-    all_config_files = [load_config(path) for path in glob(f"configs/*.json")]
+def load_all_config_files(config_dir="configs"):
+    all_config_files = [load_config(path) for path in glob(f"{config_dir}/*.json")]
     return all_config_files
 
 
@@ -169,7 +169,7 @@ def run_pipeline(config):
             if has_valid_settings(config):
                 if has_valid_profiles(config):
                     if has_valid_election_results(config):
-                        if has_valid_summaries(config):
+                        if False:
                             print(f"Run '{run_name}' has valid outputs. Exiting.")
                             sys.exit(0)
                         else:
@@ -206,7 +206,7 @@ def run_pipeline(config):
 
 def main():
 
-    configurations = [load_config("testing/configs/basic.json")]
+    configurations = load_all_config_files("testing/configs")
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

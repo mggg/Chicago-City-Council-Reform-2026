@@ -11,6 +11,7 @@ import gzip
 import csv
 import os
 import inspect
+import tempfile
 from glob import glob
 from pathlib import Path
 from joblib import Parallel, delayed
@@ -104,7 +105,6 @@ def _process_profile(
         Current default is RankProfile.
     """
     profile_path = Path(profile_file)
-    temp_path = Path(profile_file.replace(".gz", ""))
     results = {}
 
     # Parse each distinct profile type from the csv at most once and reuse it
@@ -116,21 +116,24 @@ def _process_profile(
         profile = profile_cache.get(profile_class)
         if profile is None:
 
-            # Since neither RankProfile or ScoreProfile can read compressed
-            # CSV files, we'll temporarily unpack each profile file into a 
-            # typical CSV for instantation, which we'll then delete.
-            
-            with gzip.open(profile_path, 'rt', encoding='utf-8') as infile, \
-                 open(temp_path, 'w', encoding='utf-8') as outfile:
-                reader = csv.reader(infile)
-                writer = csv.writer(outfile)
+            # Since neither RankProfile nor ScoreProfile can read compressed
+            # CSV files, we decompress to a unique temp file and delete it
+            # after loading. Using NamedTemporaryFile avoids collisions between
+            # parallel workers processing different profiles concurrently.
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.csv', delete=False, encoding='utf-8'
+            ) as tmp:
+                temp_path = Path(tmp.name)
+                with gzip.open(profile_path, 'rt', encoding='utf-8') as infile:
+                    reader = csv.reader(infile)
+                    writer = csv.writer(tmp)
+                    for row in reader:
+                        writer.writerow(row)
 
-                for row in reader:
-                    writer.writerow(row)
-            
-            profile = profile_class.from_csv(temp_path)
-
-            os.remove(temp_path)
+            try:
+                profile = profile_class.from_csv(temp_path)
+            finally:
+                os.remove(temp_path)
 
             profile_cache[profile_class] = profile
 
@@ -232,10 +235,9 @@ def simulate_elections(config) -> None:
 
             if ctx is not None:
                 with ctx:
-                    # results_list = Parallel(n_jobs=n_jobs)(
-                    #     delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
-                    # )
-                    results_list = [_process_profile(pf, election_plan, config["voting_configs"]) for pf in all_profile_files]
+                    results_list = Parallel(n_jobs=n_jobs)(
+                        delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                    )
 
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>KC Election Analysis — Config Builder</title>
+<title>Election Analysis — Config Builder</title>
 <style>
   :root {
     --bg: #f4f6f9;
@@ -245,18 +245,10 @@
 
     <div class="card">
       <h2>Slates & Candidates</h2>
-      <p class="hint" style="margin-top:-4px">Two blocs. Candidate names are comma-separated.</p>
-      <div class="grid2" id="slateInputs">
-        <div class="field">
-          <label>Slate <input type="text" class="slateName" data-slate="A" value="A" style="width:60px;display:inline-block" /></label>
-          <input type="text" class="slateCands" data-slate="A" value="A1, A2, A3, A4, A5" />
-        </div>
-        <div class="field">
-          <label>Slate <input type="text" class="slateName" data-slate="B" value="B" style="width:60px;display:inline-block" /></label>
-          <input type="text" class="slateCands" data-slate="B" value="B1, B2, B3, B4, B5" />
-        </div>
-      </div>
-      <div class="field">
+      <p class="hint" style="margin-top:-4px">Two to four slates. Candidate names are comma-separated.</p>
+      <div class="grid2" id="slateInputs"></div>
+      <button type="button" id="slate_add" class="addbtn secondary">+ Add slate</button>
+      <div class="field" style="margin-top:12px">
         <label>focal_group</label>
         <select id="focal_group"></select>
       </div>
@@ -419,6 +411,67 @@ function slateToCandidates() {
   return out;
 }
 
+// ---- dynamic slate rows (2–4 slates) ----
+const MIN_SLATES = 2, MAX_SLATES = 4;
+let slateSeq = 0;   // stable per-row id, independent of the (editable) slate name
+
+function slateRows() { return Array.from(document.querySelectorAll("#slateInputs .field")); }
+
+function updateSlateControls() {
+  const n = slateRows().length;
+  $("slate_add").disabled = n >= MAX_SLATES;
+  document.querySelectorAll("#slateInputs .slateRemove").forEach(b => { b.disabled = n <= MIN_SLATES; });
+}
+
+function makeSlateRow(name, cands) {
+  const id = "s" + (slateSeq++);
+  const div = document.createElement("div");
+  div.className = "field";
+
+  const label = document.createElement("label");
+  label.appendChild(document.createTextNode("Slate "));
+  const nameInp = document.createElement("input");
+  nameInp.type = "text"; nameInp.className = "slateName"; nameInp.dataset.slate = id;
+  nameInp.value = name; nameInp.style.cssText = "width:60px;display:inline-block";
+  const rm = document.createElement("button");
+  rm.type = "button"; rm.className = "ghost slateRemove"; rm.textContent = "×";
+  rm.title = "Remove slate"; rm.style.cssText = "float:right;padding:2px 8px";
+  rm.onclick = () => removeSlate(div);
+  label.appendChild(nameInp);
+  label.appendChild(rm);
+
+  const candInp = document.createElement("input");
+  candInp.type = "text"; candInp.className = "slateCands"; candInp.dataset.slate = id;
+  candInp.value = cands;
+
+  nameInp.addEventListener("input", rebuildSlateDependents);
+  candInp.addEventListener("input", render);
+  div.appendChild(label);
+  div.appendChild(candInp);
+  return div;
+}
+
+function addSlate(name, cands) {
+  if (slateRows().length >= MAX_SLATES) return;
+  if (name === undefined) {
+    const used = new Set(slateNames());
+    const label = ["A", "B", "C", "D"].find(l => !used.has(l)) || ("S" + (slateSeq + 1));
+    name = label; cands = `${label}1, ${label}2, ${label}3`;
+  }
+  $("slateInputs").appendChild(makeSlateRow(name, cands));
+  updateSlateControls();
+  rebuildSlateDependents();
+}
+
+function removeSlate(field) {
+  if (slateRows().length <= MIN_SLATES) return;
+  field.remove();
+  updateSlateControls();
+  rebuildSlateDependents();
+}
+
+$("slate_add").onclick = () => addSlate();
+
 // ---- rebuild anything that depends on slate names ----
 function rebuildSlateDependents() {
   const names = slateNames();
@@ -450,7 +503,7 @@ function rebuildSlateDependents() {
     turnoutWrap.appendChild(div);
   });
 
-  buildMatrix("cohesionMatrix", names, { defaultDiag: 0.6, defaultOff: 0.4 });
+  buildMatrix("cohesionMatrix", names, { defaultDiag: 0.6 });
   buildMatrix("alphaMatrix", names, { raw: true });
   render();
 }
@@ -467,15 +520,18 @@ function buildMatrix(tbodyId, names, opts) {
   head.innerHTML = "<th></th>" + names.map(n => `<th>${n}</th>`).join("");
   tbody.appendChild(head);
 
-  const alphaDefaults = { "A|A": 0.5, "A|B": 2, "B|A": 1, "B|B": 1 };
+  // Cohesion off-diagonals split the remainder so each row sums to 1 for any
+  // slate count (N=2 → 0.4, matching the previous 0.6/0.4 default). Alphas
+  // default to a uniform 1.
+  const cohesionOff = +((1 - opts.defaultDiag) / (names.length - 1 || 1)).toFixed(4);
   names.forEach(r => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<th>${r}</th>`;
     names.forEach(c => {
       const key = `${r}|${c}`;
       let def;
-      if (opts.raw) def = alphaDefaults[key] ?? 1;
-      else def = (r === c) ? opts.defaultDiag : opts.defaultOff;
+      if (opts.raw) def = 1;
+      else def = (r === c) ? opts.defaultDiag : cohesionOff;
       const td = document.createElement("td");
       const inp = document.createElement("input");
       inp.type = "number"; inp.step = "0.01"; inp.dataset.key = key; inp.dataset.matrix = tbodyId;
@@ -758,20 +814,18 @@ async function applyConfig(cfg) {
     renderDistrictList();
   }
 
-  // slates: map the config's slate keys onto the two slate rows, then rebuild
-  // the slate-dependent widgets (focal group, turnout, matrices) before filling.
+  // slates: rebuild one row per slate in the file (capped at MAX_SLATES), then
+  // rebuild the slate-dependent widgets (focal group, turnout, matrices).
   if (cfg.slate_to_candidates) {
     const slates = Object.keys(cfg.slate_to_candidates);
-    const nameInputs = Array.from(document.querySelectorAll(".slateName"));
-    nameInputs.forEach((inp, i) => {
-      if (slates[i] === undefined) return;
-      inp.value = slates[i];
-      const cand = document.querySelector(`.slateCands[data-slate="${inp.dataset.slate}"]`);
-      if (cand) cand.value = cfg.slate_to_candidates[slates[i]].join(", ");
+    $("slateInputs").innerHTML = "";
+    slates.slice(0, MAX_SLATES).forEach(s => {
+      $("slateInputs").appendChild(makeSlateRow(s, cfg.slate_to_candidates[s].join(", ")));
     });
-    if (slates.length > nameInputs.length) {
+    updateSlateControls();
+    if (slates.length > MAX_SLATES) {
       $("load_note").textContent =
-        `Note: this form supports ${nameInputs.length} slates; extra slates in the file were ignored.`;
+        `Note: this form supports ${MAX_SLATES} slates; extra slates in the file were ignored.`;
     }
     rebuildSlateDependents();
   }
@@ -832,7 +886,8 @@ $("load_btn").onclick = async () => {
 };
 
 // ---- init ----
-rebuildSlateDependents();
+addSlate("A", "A1, A2, A3, A4, A5");   // each addSlate() rebuilds slate-dependents
+addSlate("B", "B1, B2, B3, B4, B5");
 renderRuleParams();
 renderVotingList();
 renderDistrictList();

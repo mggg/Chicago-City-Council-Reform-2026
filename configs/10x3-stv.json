@@ -1,5 +1,5 @@
 {
-  "run_name": "Testing - 50x1 Plurality",
+  "run_name": "10 X 3 STV",
 
   "geodata_path": "./data/chicago_precincts_vap_cvap.gpkg",
 
@@ -15,18 +15,18 @@
 
   "num_subsamples": 5,
 
-  "total_seats": 50,
+  "total_seats": 30,
 
   "epsilon": 0.05,
 
   "voting_configs": {
-    "Plurality": { "tiebreak": "random" }
+    "FastSTV": { "n_seats": 3, "tiebreak": "random" }
   },
 
   "voter_models": ["slate_pl", "slate_bt"],
 
   "district_configs": [
-    { "num_districts": 50, "winners": 1 }
+    { "num_districts": 10, "winners": 3 }
   ],
 
   "blocs": {
@@ -37,7 +37,7 @@
 
   "turnout": { "W-A": 0.5, "B": 0.5, "H": 0.5 },
 
-  "num_voters": 100,
+  "num_voters": 10000,
 
   "slate_to_candidates": {
     "W": ["W1", "W2", "W3", "W4"],

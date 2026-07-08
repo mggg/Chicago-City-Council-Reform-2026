@@ -26,13 +26,10 @@ from pipeline.utils.helpers import (
     count_focal_winners,
     load_json,
     find_settings_file,
-    get_non_focal_group,
+    get_voter_models,
 )
+from pipeline.settings_generator import get_bloc_definitions, get_group_vap_columns
 
-
-# The three voter models the pipeline simulates. These match the subdirectory
-# names created upstream by generate_profiles / simulate_elections.
-MODES = ["slate_pl", "slate_bt", "cambridge"]
 
 # Map the raw method keys emitted by simulate_elections to display names.
 METHOD_NAME_MAP = {
@@ -60,85 +57,97 @@ LEGEND_MAPPING = {
 
 DESIRED_ORDER = ["slate_pl", "slate_bt", "cambridge"]
 
-# Human-readable names for voter groups (blocs/slates). The B bloc/slate/
-# candidates represent POC voters, so any group shown as "B" is displayed as
-# "POC" in figure titles and labels.
-GROUP_LABELS = {"C": "POC"}
+# X-axis tick spacing (in seats) for every figure. Ticks and labels are drawn at
+# multiples of this so the seat axis stays uncluttered.
+X_TICK_STEP = 5
+
+# Human-readable names for group labels (blocs/slates) shown in figure titles
+# and labels. Keys are the short codes used in the configs; anything not listed
+# falls back to the code itself.
+GROUP_LABELS = {
+    "A": "Asian",
+    "B": "Black",
+    "W": "White",
+    "W-A": "White/Asian",
+    "H": "Latino",
+}
 
 
 def _group_label(group: str) -> str:
-    """Display name for a voter group label (e.g. "B" -> "POC")."""
+    """Display name for a group label (e.g. "A" -> "Asian", "W-A" -> "White/Asian")."""
     return GROUP_LABELS.get(str(group), str(group))
 
 
 # --- Representation baselines --------------------------------------------------
 
 
-def _focal_population_share(config) -> float:
+def _focal_population_share(config, gdf) -> float:
     """
-    Statewide focal-group population proportion, straight from the geodata.
+    Citywide focal-group population proportion, straight from the geodata.
 
     This is the *overall* focal share before any districting, used as the
     "proportional representation" population baseline on each figure.
     """
-    geodata_path = Path(config["geodata_path"])
-    gdf = gpd.read_file(geodata_path)
     # vap  = total (voting-age) population across all precincts
     # ivap = population of the group of interest (the focal group) across all precincts
-    vap = sum(gdf[config["population_vap_column"]])
-    ivap = sum(gdf[config["pop_of_interest_column"]])
+    vap = float(gdf[config["population_vap_column"]].sum())
+    ivap = float(gdf[config["pop_of_interest_column"]].sum())
     return ivap / vap  # raw focal-group population proportion
 
 
-def _turnout_adjusted_share(config, iprop: float) -> float:
+def _combined_support(config, gdf) -> float:
     """
-    Reweight the raw population share by per-bloc turnout to get the effective
-    share of *voters* that belong to the focal group.
+    Citywide vote share that flows to the focal slate.
+
+    Each voter bloc's turnout-adjusted share of the electorate is weighted by that
+    bloc's cohesion toward the focal slate, then summed over all blocs:
+
+        i_cs = sum_b  voter_share[b] * cohesion[b][focal_slate]
+
+    where voter_share[b] is proportional to (bloc VAP) * turnout[b]. This is the
+    N-bloc generalization of the original two-bloc focal/non-focal formula, to
+    which it reduces when there are two blocs equal to two slates. Blocs are
+    aggregated from demographic VAP columns using the same definitions the settings
+    stage uses (get_bloc_definitions / get_group_vap_columns), so a "W-A" bloc sums
+    White + Asian VAP.
     """
-    focal_group = str(config["focal_group"])
+    focal_slate = str(config["focal_group"])
+    cohesion = config["cohesion_parameters"]
     turnout = config["turnout"]
-    if len(turnout) != 2:
-        raise ValueError("Turnout does not have exactly two keys")
-    non_focal_group = get_non_focal_group(config)
-    # Bayes-style reweighting: focal voters / (focal voters + non-focal voters).
-    return (
-        iprop * turnout[focal_group]
-        / (iprop * turnout[focal_group] + (1 - iprop) * turnout[non_focal_group])
+
+    bloc_definitions = get_bloc_definitions(config)
+    demographic_groups = list(dict.fromkeys(
+        g for groups in bloc_definitions.values() for g in groups
+    ))
+    group_columns = get_group_vap_columns(config, demographic_groups)
+
+    # Turnout-weighted voters per bloc; bloc population = summed VAP of its groups.
+    voters = {
+        bloc: turnout[bloc] * sum(float(gdf[group_columns[g]].sum()) for g in groups)
+        for bloc, groups in bloc_definitions.items()
+    }
+    total = sum(voters.values())
+    if total <= 0:
+        return 0.0
+    return sum(
+        (voters[bloc] / total) * cohesion[bloc][focal_slate]
+        for bloc in bloc_definitions
     )
 
 
-def _combined_support(config, iprop_turnout: float) -> float:
+def _compute_representation_baselines(config) -> Tuple[float, float]:
     """
-    Share of the *vote* that flows to focal candidates.
-
-    Blends two sources: focal voters who back focal candidates (cohesion), plus
-    non-focal voters who cross over to focal candidates. cohesion_parameters[g][h]
-    is the share of bloc g's votes that go to bloc h's slate.
-    """
-    focal_group = str(config["focal_group"])
-    non_focal_group = get_non_focal_group(config)
-    cohesion_parameters = config["cohesion_parameters"]
-    focal_group_cohesion = cohesion_parameters[focal_group]
-    non_focal_group_cohesion = cohesion_parameters[non_focal_group]
-    return (
-        iprop_turnout * focal_group_cohesion[focal_group]
-        + (1 - iprop_turnout) * non_focal_group_cohesion[focal_group]
-    )
-
-
-def _compute_representation_baselines(config) -> Tuple[float, float, float]:
-    """
-    Compute the three representation baselines used throughout this step.
+    Compute the representation baselines drawn on every figure.
 
     Returns:
-        (iprop, iprop_turnout, i_cs_turnout):
-            raw focal population share, turnout-adjusted voter share, and
-            combined support (vote share for focal candidates).
+        (iprop, i_cs_turnout):
+            raw focal-group population share, and combined support — the citywide
+            vote share for focal candidates.
     """
-    iprop = _focal_population_share(config)
-    iprop_turnout = _turnout_adjusted_share(config, iprop)
-    i_cs_turnout = _combined_support(config, iprop_turnout)
-    return iprop, iprop_turnout, i_cs_turnout
+    gdf = gpd.read_file(Path(config["geodata_path"]))
+    iprop = _focal_population_share(config, gdf)
+    i_cs_turnout = _combined_support(config, gdf)
+    return iprop, i_cs_turnout
 
 
 # --- Filesystem layout ---------------------------------------------------------
@@ -300,7 +309,7 @@ def build_summary_dataframe(config, results_dir: Path, i_cs_turnout: float) -> p
         # matching settings_generator's outputs/<run>/settings/<n>/ layout.
         settings_dir = Path("outputs") / f"{run_name}" / "settings" / str(dc.num_districts)
 
-        for mode in MODES:
+        for mode in get_voter_models(config):
             mode_dir = results_dir / mode
             if not mode_dir.exists():
                 continue
@@ -402,11 +411,10 @@ def _style_axes(ax, config, focal_group: str, num_dist, seats_per_district, elm,
 
     ax.set_xlim(-1, total_seats + 1)
     ax.set_ylim(0, ylim)
-    ax.set_xticks(range(0, total_seats + 1, 1))
-    # Only label multiples of 5 to keep the axis uncluttered.
-    ax.set_xticklabels([str(x) if x % 5 == 0 else "" for x in range(0, total_seats + 1)])
+    ax.set_xticks(range(0, total_seats + 1, X_TICK_STEP))
+    ax.set_xticklabels([str(x) for x in range(0, total_seats + 1, X_TICK_STEP)])
     ax.set_xlabel("Citywide Seats Won")
-    ax.set_title("Election Outcomes for POC-Preferred Candidates", fontsize=11, fontweight="bold", pad=18)
+    ax.set_title(f"Election Outcomes for {_group_label(focal_group)}-Preferred Candidates", fontsize=11, fontweight="bold", pad=18)
     ax.text(
         0.5, 1.01,
         str(config["run_name"]),
@@ -552,7 +560,7 @@ BUBBLE_MAX_AREA = 150
 BUBBLE_MIN_AREA = 10
 
 # Color of the focal-group proportional-representation reference line (matches
-# the "POC share of VAP" line on the histograms).
+# the "<focal group> share of VAP" line on the histograms).
 PROP_LINE_COLOR = "orangered"
 
 # Single fill color for individual-mode bubbles; Combined uses a distinct dark color.
@@ -622,9 +630,8 @@ def _draw_method_bubbles(
     ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
 
     ax.set_xlim(-1, total_seats + 1)
-    ax.set_xticks(range(0, total_seats + 2, 1))
-    # Only label even seat counts to keep the axis uncluttered.
-    ax.set_xticklabels([str(x) if x % 2 == 0 else "" for x in range(0, total_seats + 2)])
+    ax.set_xticks(range(0, total_seats + 1, X_TICK_STEP))
+    ax.set_xticklabels([str(x) for x in range(0, total_seats + 1, X_TICK_STEP)])
 
     ax.set_ylim(-0.5, len(modes_in_order) - 0.5)
     ax.set_yticks(range(len(modes_in_order)))
@@ -723,7 +730,7 @@ def _plot_bubbles_for_config(
     fig.subplots_adjust(top=0.72, bottom=0.15)
 
     fig.suptitle(
-        "Election Outcomes for POC-Preferred Candidates",
+        f"Election Outcomes for {_group_label(config['focal_group'])}-Preferred Candidates",
         fontsize=11, fontweight="bold", y=0.97,
     )
     fig.text(0.5, 0.87, run_name, ha="center", fontsize=8, color="gray", style="italic")
@@ -821,7 +828,7 @@ def plot_combined_bubbles_all_runs(
 
     runs.sort(key=lambda r: (not r[1].lower().startswith("basic"), r[0]))
 
-    iprop = _focal_population_share(config)
+    iprop = _focal_population_share(config, gpd.read_file(Path(config["geodata_path"])))
     observed_max_seats = max(int(c["focal_seats"].max()) for _, _, c in runs)
     total_seats = max(int(config["total_seats"]), observed_max_seats)
     i_share = iprop * total_seats
@@ -864,7 +871,7 @@ def plot_combined_bubbles_all_runs(
     if n_runs == 1:
         axes = [axes]
 
-    x_tick_step = max(1, total_seats // 10)
+    x_tick_step = X_TICK_STEP
     x_ticks = range(0, total_seats + x_tick_step, x_tick_step)
 
     for ax, (_, label, per_mode) in zip(axes, runs):
@@ -927,7 +934,7 @@ def plot_combined_bubbles_all_runs(
     top_margin = 1 - 1.0 / fig_height
     fig.subplots_adjust(top=top_margin)
     fig.suptitle(
-        "Election Outcomes for POC-Preferred Candidates",
+        f"Election Outcomes for {_group_label(config['focal_group'])}-Preferred Candidates",
         fontsize=11, fontweight="bold", y=0.99,
     )
     fig.legend(
@@ -970,7 +977,7 @@ def summarize_results(config) -> Path:
     run_name = str(config["run_name"])
     focal_group = str(config["focal_group"])
 
-    iprop, iprop_turnout, i_cs_turnout = _compute_representation_baselines(config)
+    iprop, i_cs_turnout = _compute_representation_baselines(config)
 
     results_dir, summary_dir, figs_dir = _prepare_directories(run_name)
 

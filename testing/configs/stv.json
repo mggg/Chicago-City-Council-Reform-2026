@@ -1,5 +1,5 @@
 {
-  "run_name": "Testing - 50x1 Plurality",
+  "run_name": "Testing - 10 X 5 STV",
 
   "geodata_path": "./data/chicago_precincts_vap_cvap.gpkg",
 
@@ -20,13 +20,13 @@
   "epsilon": 0.05,
 
   "voting_configs": {
-    "Plurality": { "tiebreak": "random" }
+    "FastSTV": { "n_seats": 5, "tiebreak": "random" }
   },
 
   "voter_models": ["slate_pl", "slate_bt"],
 
   "district_configs": [
-    { "num_districts": 50, "winners": 1 }
+    { "num_districts": 10, "winners": 5 }
   ],
 
   "blocs": {

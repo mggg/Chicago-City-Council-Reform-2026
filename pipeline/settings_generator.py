@@ -14,9 +14,9 @@ from pathlib import Path
 import jsonlines as jl
 from tqdm import tqdm
 
-# Default mapping from bloc label -> VAP column in the geodata (matches the
-# schema written by data_generator). Override per-run with a "group_vap_columns"
-# entry in the config if your blocs or column names differ.
+# Default mapping from demographic-group label -> VAP column in the geodata
+# (matches the schema written by data_generator). Override per-run with a
+# "group_vap_columns" entry in the config if your groups or column names differ.
 DEFAULT_GROUP_VAP_COLUMNS = {
     "W": "white_vap_20",
     "B": "bvap_20",
@@ -25,63 +25,120 @@ DEFAULT_GROUP_VAP_COLUMNS = {
 }
 
 
-def get_group_vap_columns(config):
+def get_bloc_definitions(config):
     """
-    Return the {bloc: vap_column} mapping for every bloc modeled in this run.
+    Return {bloc: [demographic_group, ...]} defining which demographic groups
+    each voter bloc aggregates.
 
-    The set of blocs is taken from slate_to_candidates (the blocs VoteKit will
-    build profiles for). Columns come from config["group_vap_columns"] when
-    present, otherwise DEFAULT_GROUP_VAP_COLUMNS.
+    Voter blocs (who votes) and candidate slates (who runs) are independent axes.
+    By default every slate gets a matching single-group bloc of the same name
+    (the original blocs == slates behavior). Set a "blocs" entry in the config to
+    combine demographic groups into one bloc, e.g.
+    {"W-A": ["W", "A"], "B": ["B"], "H": ["H"]} — a 3-bloc electorate that still
+    faces the 4 slates in slate_to_candidates.
 
     Args:
         config: Parsed config dict.
 
     Returns:
-        Dict mapping each bloc label to its VAP column name.
+        Dict mapping each bloc label to the list of demographic groups it covers.
+    """
+    if "blocs" in config:
+        return {bloc: list(groups) for bloc, groups in config["blocs"].items()}
+    return {slate: [slate] for slate in config["slate_to_candidates"].keys()}
+
+
+def get_group_vap_columns(config, demographic_groups):
+    """
+    Return the {demographic_group: vap_column} mapping for the given groups.
+
+    Columns come from config["group_vap_columns"] when present, otherwise
+    DEFAULT_GROUP_VAP_COLUMNS.
+
+    Args:
+        config: Parsed config dict.
+        demographic_groups: Iterable of demographic-group labels to resolve.
+
+    Returns:
+        Dict mapping each demographic group to its VAP column name.
     """
     mapping = config.get("group_vap_columns", DEFAULT_GROUP_VAP_COLUMNS)
-    blocs = list(config["slate_to_candidates"].keys())
-    missing = [g for g in blocs if g not in mapping]
+    missing = [g for g in demographic_groups if g not in mapping]
     if missing:
         raise KeyError(
-            f"No VAP column mapping for bloc(s) {missing}. Add them to "
-            "'group_vap_columns' in the config or to DEFAULT_GROUP_VAP_COLUMNS."
+            f"No VAP column mapping for demographic group(s) {missing}. Add them "
+            "to 'group_vap_columns' in the config or to DEFAULT_GROUP_VAP_COLUMNS."
         )
-    return {g: mapping[g] for g in blocs}
+    return {g: mapping[g] for g in demographic_groups}
 
 
-def _build_district_settings(row, config, group_columns):
+def _validate_bloc_config(config, bloc_definitions):
+    """
+    Check turnout, cohesion_parameters, and alphas are keyed consistently with the
+    blocs (rows) and slates (columns) this run uses.
+
+    Raises:
+        KeyError: with a specific message if any bloc or slate entry is missing.
+    """
+    blocs = set(bloc_definitions)
+    slates = set(config["slate_to_candidates"])
+
+    missing_turnout = blocs - set(config["turnout"])
+    if missing_turnout:
+        raise KeyError(f"turnout is missing entries for bloc(s) {sorted(missing_turnout)}.")
+
+    for name in ("cohesion_parameters", "alphas"):
+        matrix = config[name]
+        missing_rows = blocs - set(matrix)
+        if missing_rows:
+            raise KeyError(f"{name} is missing row(s) for bloc(s) {sorted(missing_rows)}.")
+        for bloc in blocs:
+            missing_cols = slates - set(matrix[bloc])
+            if missing_cols:
+                raise KeyError(
+                    f"{name}['{bloc}'] is missing column(s) for slate(s) {sorted(missing_cols)}."
+                )
+
+
+def _build_district_settings(row, config, group_columns, bloc_definitions):
     """
     Compute turnout-adjusted bloc proportions and population values for a district.
 
-    Every bloc in group_columns gets a proportion: its share of the modeled VAP,
-    weighted by turnout and normalized so the proportions sum to 1. This is the
-    N-bloc generalization of the original two-bloc turnout adjustment.
+    Each voter bloc's weight is its turnout times the summed VAP of the
+    demographic groups it aggregates; weights are normalized so the proportions
+    sum to 1. Blocs and slates are independent — bloc_definitions says which
+    demographic groups make up each bloc, so a "W-A" bloc sums White + Asian VAP.
 
     Args:
         row: Row from the district population dataframe.
         config: Parsed config dict.
-        group_columns: Dict mapping each bloc label to its VAP column name.
+        group_columns: Dict mapping each demographic group to its VAP column name.
+        bloc_definitions: Dict mapping each bloc to its demographic groups.
 
     Returns:
-        Dict containing bloc_proportions (one entry per bloc) and per-bloc plus
+        Dict containing bloc_proportions (one entry per bloc) and per-group plus
         total VAP counts for the district.
     """
     turnout = config['turnout']
-    blocs = list(group_columns)
+    blocs = list(bloc_definitions)
 
-    # Turnout-weighted VAP per bloc, then normalize across the modeled blocs.
-    weighted = {g: float(row[group_columns[g]]) * turnout[g] for g in blocs}
+    # Turnout-weighted VAP per bloc (sum over the bloc's demographic groups),
+    # then normalize across the blocs.
+    weighted = {
+        bloc: turnout[bloc] * sum(float(row[group_columns[g]]) for g in bloc_definitions[bloc])
+        for bloc in blocs
+    }
     denom = sum(weighted.values())
     if denom > 0:
-        bloc_proportions = {g: weighted[g] / denom for g in blocs}
+        bloc_proportions = {bloc: weighted[bloc] / denom for bloc in blocs}
     else:
         # District with no modeled VAP: fall back to equal shares.
-        bloc_proportions = {g: 1.0 / len(blocs) for g in blocs}
+        bloc_proportions = {bloc: 1.0 / len(blocs) for bloc in blocs}
 
     settings = {"bloc_proportions": bloc_proportions}
-    for g in blocs:
-        settings[group_columns[g]] = float(row[group_columns[g]])
+    # Record the raw per-demographic-group VAP counts that fed the proportions.
+    for col in dict.fromkeys(group_columns.values()):
+        settings[col] = float(row[col])
     settings[config["population_vap_column"]] = float(row[config["population_vap_column"]])
     return settings
 
@@ -99,7 +156,13 @@ def generate_settings(config):
         where <plan_idx> is the zero-based chain sample index and <district_id> is the district label.
         bloc_proportions in each file are turnout-adjusted focal group proportions.
     """
-    group_columns = get_group_vap_columns(config)
+    bloc_definitions = get_bloc_definitions(config)
+    _validate_bloc_config(config, bloc_definitions)
+    # The demographic groups we need VAP for are the union across all blocs.
+    demographic_groups = list(dict.fromkeys(
+        g for groups in bloc_definitions.values() for g in groups
+    ))
+    group_columns = get_group_vap_columns(config, demographic_groups)
 
     population_data = gpd.read_file(config['geodata_path'])
     needed_columns = list(dict.fromkeys(
@@ -139,7 +202,7 @@ def generate_settings(config):
 
                 for _, row in data_by_district.iterrows():
                     district = row.name
-                    district_settings = _build_district_settings(row, config, group_columns)
+                    district_settings = _build_district_settings(row, config, group_columns, bloc_definitions)
                     settings = output_settings | district_settings
                     with open(
                         f"{settings_folder}/{run_name}_{district_num}_sample_settings_district_plan_{sample_idx:03d}_district_{district:02d}.json",

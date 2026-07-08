@@ -9,7 +9,7 @@ to CSV files for downstream election simulations.
 from votekit.ballot_generator import (
     BlocSlateConfig,
     slate_pl_profile_generator,
-    slate_bt_profile_generator,
+    slate_bt_profile_generator_using_mcmc,
     cambridge_profile_generator,
 )
 
@@ -17,15 +17,17 @@ from glob import glob
 from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
 from pathlib import Path
-from pipeline.utils.helpers import load_json
+from pipeline.utils.helpers import load_json, get_voter_models
 import json
 import time
 import gzip
 
-# maps mode name to votekit profile generator function
+# maps mode name to votekit profile generator function. slate_bt uses the MCMC
+# sampler (O(voters), no ballot-type enumeration) — far faster than the exact
+# generator, at the cost of an approximate ballot-type distribution.
 generator_name_to_function = {
     "slate_pl": slate_pl_profile_generator,
-    "slate_bt": slate_bt_profile_generator,
+    "slate_bt": slate_bt_profile_generator_using_mcmc,
     "cambridge": cambridge_profile_generator,
 }
 
@@ -80,13 +82,28 @@ def generate_profiles(config):
 
     num_reps = config['num_reps']
     run_name = config['run_name']
+
+    models = get_voter_models(config)
+    unknown = [m for m in models if m not in generator_name_to_function]
+    if unknown:
+        raise ValueError(
+            f"Unknown voter_models {unknown}. Valid models: "
+            f"{sorted(generator_name_to_function)}."
+        )
+    if "cambridge" in models and len(config["slate_to_candidates"]) != 2:
+        raise ValueError(
+            "The 'cambridge' model supports exactly 2 slates, but this run has "
+            f"{len(config['slate_to_candidates'])}. Remove 'cambridge' from "
+            "voter_models or reduce to 2 slates."
+        )
+
     # repeat for each replicate
     for duplicate_indx in range(num_reps):
         rep_start = time.perf_counter()
         print(f"[rep {duplicate_indx + 1}/{num_reps}] Start at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         district_nums =  [d_config['num_districts'] for d_config in config['district_configs']]
         for district_num in district_nums:
-            for mode in ["slate_pl", "slate_bt", "cambridge"]:
+            for mode in models:
                 settings_folder = Path(f"outputs/{run_name}/settings/{district_num}")
                 profile_folder = Path(f"outputs/{run_name}/profiles/{mode}/{district_num}")
                 profile_folder.mkdir(exist_ok=True, parents=True)

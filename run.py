@@ -14,6 +14,7 @@ from pipeline.summarize_results import summarize_results, plot_combined_bubbles_
 from pipeline.data_generator import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
+from pipeline.utils.helpers import get_voter_models
 
 def load_all_config_files(config_dir="configs"):
     all_config_files = [load_config(path) for path in glob(f"{config_dir}/*.json")]
@@ -96,7 +97,7 @@ def has_valid_profiles(config):
         * sum(d["num_districts"] for d in config["district_configs"])
         * config["num_reps"]
     )
-    for mode in ["slate_pl", "slate_bt", "cambridge"]:
+    for mode in get_voter_models(config):
         count = sum(1 for f in (base / mode).rglob("*.csv.gz") if f.stat().st_size > 0)
         if count != expected_per_mode:
             print(f"Missing valid settings for {mode} mode. Running pipeline from profiles stage.")
@@ -109,7 +110,7 @@ def has_valid_election_results(config):
     if not base.is_dir():
         print("Election results do not exist. Running pipeline from election simulation stage.")
         return False
-    for mode in ["slate_pl", "slate_bt", "cambridge"]:
+    for mode in get_voter_models(config):
         mode_dir = base / mode
         if not mode_dir.is_dir():
             print(f"Election results for {mode} mode do not exist. Running pipeline from election simulation stage.")

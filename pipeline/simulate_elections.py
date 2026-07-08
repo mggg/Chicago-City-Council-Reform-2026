@@ -18,6 +18,7 @@ from joblib import Parallel, delayed
 from votekit import RankProfile, ScoreProfile, elections
 from typing import List, Iterable, Any, get_args
 from dataclasses import dataclass
+from pipeline.utils.helpers import get_voter_models
 
 
 
@@ -206,8 +207,8 @@ def simulate_elections(config) -> None:
     # all voting rules included within the config
     election_plan = _build_election_plan(config["voting_configs"])
 
-    modes = ["slate_pl", "slate_bt", "cambridge"]
-    
+    modes = get_voter_models(config)
+
     # Use all available cores by default. Set SIMULATE_ELECTIONS_N_JOBS=1 to run
     # serially in the main process so breakpoints inside _process_profile are hit
     # under the debugger (joblib worker subprocesses are not debugged otherwise).

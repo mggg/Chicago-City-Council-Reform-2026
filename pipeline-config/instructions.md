@@ -61,7 +61,7 @@ The form covers the full config schema used by `run.py`:
 | `total_seats`, `num_voters` | election sizing |
 | `voting_configs` | map of rule → its VoteKit parameters (rule-specific fields) |
 | `district_configs` | list of `{ num_districts, winners }` |
-| `slate_to_candidates`, `focal_group` | two blocs + candidate lists |
+| `slate_to_candidates`, `focal_group` | 2–4 slates (Add/Remove slate) + candidate lists |
 | `turnout` | per-slate turnout rate |
 | `cohesion_parameters`, `alphas` | slate × slate matrices |
 

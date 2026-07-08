@@ -13,40 +13,77 @@ import geopandas as gpd
 from pathlib import Path
 import jsonlines as jl
 from tqdm import tqdm
-from pipeline.utils.helpers import get_non_focal_group
 
-def _build_district_settings(row, config):
+# Default mapping from bloc label -> VAP column in the geodata (matches the
+# schema written by data_generator). Override per-run with a "group_vap_columns"
+# entry in the config if your blocs or column names differ.
+DEFAULT_GROUP_VAP_COLUMNS = {
+    "W": "white_vap_20",
+    "B": "bvap_20",
+    "H": "hvap_20",
+    "A": "asian_nhpi_vap_20",
+}
+
+
+def get_group_vap_columns(config):
     """
-    Compute turnout-adjusted bloc proportions and population values for a district.
+    Return the {bloc: vap_column} mapping for every bloc modeled in this run.
+
+    The set of blocs is taken from slate_to_candidates (the blocs VoteKit will
+    build profiles for). Columns come from config["group_vap_columns"] when
+    present, otherwise DEFAULT_GROUP_VAP_COLUMNS.
 
     Args:
-        row: Row from the district population dataframe.
-        turnout: Dict mapping group -> turnout rate.
-        focal_group: Group of interest.
-        other_group: Non-focal comparison group.
         config: Parsed config dict.
 
     Returns:
-        Dict containing bloc_proportions and population counts for the district.
+        Dict mapping each bloc label to its VAP column name.
+    """
+    mapping = config.get("group_vap_columns", DEFAULT_GROUP_VAP_COLUMNS)
+    blocs = list(config["slate_to_candidates"].keys())
+    missing = [g for g in blocs if g not in mapping]
+    if missing:
+        raise KeyError(
+            f"No VAP column mapping for bloc(s) {missing}. Add them to "
+            "'group_vap_columns' in the config or to DEFAULT_GROUP_VAP_COLUMNS."
+        )
+    return {g: mapping[g] for g in blocs}
+
+
+def _build_district_settings(row, config, group_columns):
+    """
+    Compute turnout-adjusted bloc proportions and population values for a district.
+
+    Every bloc in group_columns gets a proportion: its share of the modeled VAP,
+    weighted by turnout and normalized so the proportions sum to 1. This is the
+    N-bloc generalization of the original two-bloc turnout adjustment.
+
+    Args:
+        row: Row from the district population dataframe.
+        config: Parsed config dict.
+        group_columns: Dict mapping each bloc label to its VAP column name.
+
+    Returns:
+        Dict containing bloc_proportions (one entry per bloc) and per-bloc plus
+        total VAP counts for the district.
     """
     turnout = config['turnout']
-    focal_group = config['focal_group']
-    other_group = get_non_focal_group(config)
+    blocs = list(group_columns)
 
-    prop = float(row[config['pop_of_interest_column']] / row[config['population_vap_column']])
-    adjusted_prop = (
-        prop * turnout[focal_group]
-        / (prop * turnout[focal_group] + (1 - prop) * turnout[other_group])
-    )
-    return {
-        "bloc_proportions": {
-            focal_group: adjusted_prop,
-            other_group: 1 - adjusted_prop,
-        },
-        config["pop_of_interest_column"]: row[config["pop_of_interest_column"]],
-        # config["population_column"]: row[config["population_column"]],
-        config["population_vap_column"]: row[config["population_vap_column"]],
-    }
+    # Turnout-weighted VAP per bloc, then normalize across the modeled blocs.
+    weighted = {g: float(row[group_columns[g]]) * turnout[g] for g in blocs}
+    denom = sum(weighted.values())
+    if denom > 0:
+        bloc_proportions = {g: weighted[g] / denom for g in blocs}
+    else:
+        # District with no modeled VAP: fall back to equal shares.
+        bloc_proportions = {g: 1.0 / len(blocs) for g in blocs}
+
+    settings = {"bloc_proportions": bloc_proportions}
+    for g in blocs:
+        settings[group_columns[g]] = float(row[group_columns[g]])
+    settings[config["population_vap_column"]] = float(row[config["population_vap_column"]])
+    return settings
 
 def generate_settings(config):
     """
@@ -62,8 +99,13 @@ def generate_settings(config):
         where <plan_idx> is the zero-based chain sample index and <district_id> is the district label.
         bloc_proportions in each file are turnout-adjusted focal group proportions.
     """
+    group_columns = get_group_vap_columns(config)
+
     population_data = gpd.read_file(config['geodata_path'])
-    population_data = population_data[[config['pop_of_interest_column'],config['population_vap_column']]]
+    needed_columns = list(dict.fromkeys(
+        list(group_columns.values()) + [config['population_vap_column']]
+    ))
+    population_data = population_data[needed_columns]
 
     # subsample evenly spaced plans from the chain
     chain_length = config['chain_length']
@@ -97,7 +139,7 @@ def generate_settings(config):
 
                 for _, row in data_by_district.iterrows():
                     district = row.name
-                    district_settings = _build_district_settings(row, config)
+                    district_settings = _build_district_settings(row, config, group_columns)
                     settings = output_settings | district_settings
                     with open(
                         f"{settings_folder}/{run_name}_{district_num}_sample_settings_district_plan_{sample_idx:03d}_district_{district:02d}.json",

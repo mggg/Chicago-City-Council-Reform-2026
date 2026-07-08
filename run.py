@@ -11,7 +11,7 @@ from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
 from pipeline.simulate_elections import simulate_elections
 from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs
-from pipeline.data_generator_blocks import generate_data
+from pipeline.data_generator import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
 

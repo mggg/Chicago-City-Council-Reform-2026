@@ -24,47 +24,6 @@ from gerrychain.tree import bipartition_tree
 # required for gerrychain reproducibility
 os.environ.setdefault("PYTHONHASHSEED", "0")
 
-# def find_matching_chain(config):
-#     n_district = config["district_configs"][0]["num_districts"]
-
-#     base = Path("outputs") / "districts" / "chain_out" / str(n_district)
-
-#     if not base.exists():
-#         return None
-
-#     metadata = base / f"{n_district}_districts.json"
-
-#     if not metadata.exists():
-#         return None
-
-#     with open(metadata) as f:
-#         config_md = json.load(f)
-
-#     keys = [
-#         "geodata_path",
-#         "population_column",
-#         "chain_length",
-#         "epsilon",
-#         "seed",
-#     ]
-
-#     if any(config[k] != config_md[k] for k in keys):
-#         return None
-
-#     chain_file = base / f"{n_district}_districts.jsonl.gz"
-
-#     if not chain_file.exists():
-#         return None
-
-#     try:
-#         with gzip.open(chain_file, "rt") as g:
-#             if sum(1 for _ in g) != config["chain_length"]:
-#                 return None
-#     except Exception:
-#         return None
-
-#     return base
-
 def generate_districts(config):
     """
     Run a recom markov chain for each district count
@@ -112,8 +71,6 @@ def generate_districts(config):
     graph = Graph.from_networkx(
         nx.convert_node_labels_to_integers(graph, first_label=0)
     )
-    # for node in graph.nodes:
-    #     graph.nodes[node]["poc_vap_20"] = graph.nodes[node]["total_vap_20"] - graph.nodes[node]["white_vap_20"]
 
     # Save graph
     output_dir = Path(f"outputs/{run_name}/graph")
@@ -131,10 +88,10 @@ def generate_districts(config):
         "cut_edges": cut_edges,
         "POCVAP20": Tally("poc_vap_20", "POCVAP20"),
         "VAP20": Tally("total_vap_20", "VAP20"),
-        # "PREFERENCE": mmpreference("POCVAP20", "VAP20", pocvap/vap),
-        # "MAGNITUDE": lambda P: { d: counter(P["population"][d]) for d in P.parts },
-        # "SEATS": TOTAL_SEATS,
-        # "STEP": N_ITERATIONS
+        "WVAP20": Tally("white_vap_20", "WVAP20"),
+        "BVAP20": Tally("bvap_20", "BVAP20"),
+        "HVAP20": Tally("hvap_20", "HVAP20"),
+        "AVAP20": Tally("asian_nhpi_vap_20", "AVAP20")
     }
 
     # Create an initial partition
@@ -144,7 +101,7 @@ def generate_districts(config):
         epsilon=seed_epsilon,
         pop_col=population_column,
         updaters=updaters,
-        )
+    )
 
     target_population = sum(initial_partition["population"].values()) / len(initial_partition)
 

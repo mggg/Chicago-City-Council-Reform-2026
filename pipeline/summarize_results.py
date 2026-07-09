@@ -65,6 +65,20 @@ DESIRED_ORDER = ["slate_pl", "slate_bt", "cambridge"]
 # multiples of this so the seat axis stays uncluttered.
 X_TICK_STEP = 5
 
+# Padding (in seats) left beyond the largest relevant value when capping the
+# seat x-axis, so bars/bubbles and reference lines don't touch the right edge.
+X_AXIS_PAD = 3
+
+
+def _seat_axis_upper(max_seat: float, total_seats: int) -> int:
+    """Upper limit for a seat x-axis: just past the largest relevant value
+    (observed seats and reference lines), rounded up to a tick and capped at
+    total_seats. Keeps plots from being mostly empty space when no group comes
+    close to winning every seat."""
+    padded = max_seat + X_AXIS_PAD
+    ticks_up = -(-int(padded) // X_TICK_STEP)  # ceil division to next whole tick
+    return min(ticks_up * X_TICK_STEP, total_seats)
+
 # Human-readable names for group labels (blocs/slates) shown in figure titles
 # and labels. Keys are the short codes used in the configs; anything not listed
 # falls back to the code itself.
@@ -477,19 +491,17 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame, seat_col: str = "focal_
     return max_bin_height
 
 
-def _style_axes(ax, config, focal_group: str, num_dist, seats_per_district, elm, ylim: float) -> None:
+def _style_axes(ax, config, focal_group: str, num_dist, seats_per_district, elm, ylim: float, x_upper: int) -> None:
     """Apply spines, limits, ticks, labels, and title for one histogram figure."""
     # Thin, uniform spines.
     for spine in ax.spines.values():
         spine.set_linewidth(0.5)
 
-    # x-axis spans 0..total_seats; give the y-axis 20% headroom for the labels.
-    total_seats = config["total_seats"]
-
-    ax.set_xlim(-1, total_seats + 1)
+    # x-axis spans 0..x_upper (capped near the data); 20% y headroom for labels.
+    ax.set_xlim(-1, x_upper + 1)
     ax.set_ylim(0, ylim)
-    ax.set_xticks(range(0, total_seats + 1, X_TICK_STEP))
-    ax.set_xticklabels([str(x) for x in range(0, total_seats + 1, X_TICK_STEP)])
+    ax.set_xticks(range(0, x_upper + 1, X_TICK_STEP))
+    ax.set_xticklabels([str(x) for x in range(0, x_upper + 1, X_TICK_STEP)])
     ax.set_xlabel("Citywide Seats Won")
     ax.set_title(f"Election Outcomes for {_group_label(focal_group)}-Preferred Candidates", fontsize=11, fontweight="bold", pad=18)
     ax.text(
@@ -518,21 +530,29 @@ def _ordered_mode_handles(ax):
     return ordered_handles, ordered_labels
 
 
-def _build_mode_legend(ax) -> None:
-    """Draw a legend of modes only, renamed via LEGEND_MAPPING and in DESIRED_ORDER."""
+def _build_mode_legend(ax, ref_handles=None, ref_labels=None) -> None:
+    """Draw a legend of modes (renamed via LEGEND_MAPPING, in DESIRED_ORDER),
+    optionally followed by the reference-line entries (share of VAP, combined
+    support) so their descriptions live in the legend instead of on the plot."""
     ordered_handles, ordered_labels = _ordered_mode_handles(ax)
-    ax.legend(ordered_handles, ordered_labels, title="Mode", fontsize=8)
+    handles = ordered_handles + list(ref_handles or [])
+    labels = ordered_labels + list(ref_labels or [])
+    ax.legend(handles, labels, fontsize=8)
 
 
-def _draw_reference_lines(ax, config, iprop, i_cs_turnout: float, ylim: float, label=None) -> None:
+def _draw_reference_lines(ax, config, iprop, i_cs_turnout: float, ylim: float, label=None):
     """
-    Draw the "proportional representation" reference lines and their labels.
+    Draw the "proportional representation" reference lines.
 
     i_cs_share : seats implied by combined *support* (votes for the group's cands).
     i_share    : seats implied by the group's raw *population* share (skipped when
                  iprop is None, e.g. a slate with no VAP-column mapping).
     label      : display name for the group (defaults to the focal group). Comparing
     where the histogram mass falls against these lines is the whole point.
+
+    The lines' descriptions (share of VAP, combined support) are carried on the
+    line labels so they appear in the legend rather than as free text that
+    overlaps the histogram. Returns (handles, labels) for those lines.
     """
     total_seats = config["total_seats"]
     group_label = label if label is not None else _group_label(config["focal_group"])
@@ -542,35 +562,21 @@ def _draw_reference_lines(ax, config, iprop, i_cs_turnout: float, ylim: float, l
     i_cs_share = i_cs_turnout * total_seats
     i_share = iprop * total_seats if iprop is not None else None
 
-    # Nudge the two text labels apart so they don't overlap when the lines are
-    # close: the leftmost line gets a right-aligned label and vice versa.
-    if i_share is not None and i_cs_share < i_share:
-        i_cs_alignment, i_share_alignment, i_cs_ha, i_share_ha = -0.3, 0.3, "right", "left"
-    else:
-        i_cs_alignment, i_share_alignment, i_cs_ha, i_share_ha = 0.3, -0.3, "left", "right"
+    cs_label = f"Combined support: {i_cs_turnout * 100:.2f}% ({i_cs_share:.2f} seats)"
+    cs_line = ax.axvline(i_cs_share, color=color_cs, linewidth=1, label=cs_label)
 
-    ax.axvline(i_cs_share, color=color_cs, linewidth=1)
-    ax.text(
-        i_cs_share + i_cs_alignment,
-        ylim * 0.90,
-        f"Combined support\n{i_cs_turnout * 100:.2f}%\n({i_cs_share:.2f} seats)",
-        va="center",
-        ha=i_cs_ha,
-        fontsize=8,
-        color=color_cs,
-    )
+    handles = [cs_line]
+    labels = [cs_label]
 
     if i_share is not None:
-        ax.axvline(i_share, color=color_iprop, linestyle=":", linewidth=1)
-        ax.text(
-            i_share + i_share_alignment,
-            ylim * 0.90,
-            f"{group_label} share of VAP\n{iprop * 100:.2f}%\n({i_share:.2f} seats)",
-            va="center",
-            ha=i_share_ha,
-            fontsize=8,
-            color=color_iprop,
+        iprop_label = f"{group_label} share of VAP: {iprop * 100:.2f}% ({i_share:.2f} seats)"
+        iprop_line = ax.axvline(
+            i_share, color=color_iprop, linestyle=":", linewidth=1, label=iprop_label
         )
+        handles.append(iprop_line)
+        labels.append(iprop_label)
+
+    return handles, labels
 
 
 def _plot_one_histogram(
@@ -591,9 +597,13 @@ def _plot_one_histogram(
     max_bin_height = _draw_mode_histograms(ax, group_distn)
     ylim = max_bin_height * 1.2 if max_bin_height > 0 else 1
 
-    _style_axes(ax, config, focal_group, num_dist, seats_per_district, elm, ylim)
-    _build_mode_legend(ax)
-    _draw_reference_lines(ax, config, iprop, i_cs_turnout, ylim)
+    total_seats = config["total_seats"]
+    max_seat = max(group_distn["focal_seats"].max(), i_cs_turnout * total_seats, iprop * total_seats if iprop is not None else 0)
+    x_upper = _seat_axis_upper(max_seat, total_seats)
+
+    _style_axes(ax, config, focal_group, num_dist, seats_per_district, elm, ylim, x_upper)
+    ref_handles, ref_labels = _draw_reference_lines(ax, config, iprop, i_cs_turnout, ylim)
+    _build_mode_legend(ax, ref_handles, ref_labels)
 
     fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{elm}_bymode.png"
     fig.savefig(fig_path, dpi=300, bbox_inches="tight")
@@ -627,15 +637,14 @@ def plot_representation_histograms(
         )
 
 
-def _style_slate_axis(ax, config, slate: str, ylim: float) -> None:
+def _style_slate_axis(ax, config, slate: str, ylim: float, x_upper: int) -> None:
     """Spines, limits, ticks, and a per-slate subplot title for the by-slate panel."""
     for spine in ax.spines.values():
         spine.set_linewidth(0.5)
-    total_seats = config["total_seats"]
-    ax.set_xlim(-1, total_seats + 1)
+    ax.set_xlim(-1, x_upper + 1)
     ax.set_ylim(0, ylim)
-    ax.set_xticks(range(0, total_seats + 1, X_TICK_STEP))
-    ax.set_xticklabels([str(x) for x in range(0, total_seats + 1, X_TICK_STEP)], fontsize=7)
+    ax.set_xticks(range(0, x_upper + 1, X_TICK_STEP))
+    ax.set_xticklabels([str(x) for x in range(0, x_upper + 1, X_TICK_STEP)], fontsize=7)
     ax.set_xlabel("Citywide Seats Won", fontsize=8)
     ax.set_title(_group_label(slate), fontsize=10, fontweight="bold")
     ax.tick_params(axis="both", which="major", labelsize=7)
@@ -660,12 +669,28 @@ def _plot_slate_panel(
     fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 3.2 * nrows), squeeze=False)
     flat = [ax for row in axes for ax in row]
 
+    # Shared x cap across all slate subplots so they stay comparable: the largest
+    # observed seat count or reference line over every slate, padded and capped.
+    total_seats = config["total_seats"]
+    seat_max = max((group_distn[f"seats_{s}"].max() for s in slates), default=0)
+    ref_max = max(
+        (max(i_cs, iprop if iprop is not None else 0) * total_seats
+         for iprop, i_cs in slate_baselines.values()),
+        default=0,
+    )
+    x_upper = _seat_axis_upper(max(seat_max, ref_max), total_seats)
+
     for ax, slate in zip(flat, slates):
         max_bin_height = _draw_mode_histograms(ax, group_distn, seat_col=f"seats_{slate}")
         ylim = max_bin_height * 1.2 if max_bin_height > 0 else 1
-        _style_slate_axis(ax, config, slate, ylim)
+        _style_slate_axis(ax, config, slate, ylim, x_upper)
         iprop, i_cs = slate_baselines.get(slate, (None, 0.0))
-        _draw_reference_lines(ax, config, iprop, i_cs, ylim, label=_group_label(slate))
+        ref_handles, ref_labels = _draw_reference_lines(
+            ax, config, iprop, i_cs, ylim, label=_group_label(slate)
+        )
+        # Per-slate reference values differ, so each subplot carries its own
+        # legend for them; the shared mode legend lives on the figure below.
+        ax.legend(ref_handles, ref_labels, fontsize=6, loc="best")
 
     # Hide any unused cells in the grid.
     for ax in flat[n:]:
@@ -757,6 +782,7 @@ def _draw_method_bubbles(
     size_scale: float,
     iprop: float,
     config,
+    x_upper: int,
 ) -> None:
     """
     Draw the bubble grid (mode x seats, area sized by occurrence count) for one
@@ -786,9 +812,9 @@ def _draw_method_bubbles(
     i_share = iprop * total_seats
     ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
 
-    ax.set_xlim(-1, total_seats + 1)
-    ax.set_xticks(range(0, total_seats + 1, X_TICK_STEP))
-    ax.set_xticklabels([str(x) for x in range(0, total_seats + 1, X_TICK_STEP)])
+    ax.set_xlim(-1, x_upper + 1)
+    ax.set_xticks(range(0, x_upper + 1, X_TICK_STEP))
+    ax.set_xticklabels([str(x) for x in range(0, x_upper + 1, X_TICK_STEP)])
 
     ax.set_ylim(-0.5, len(modes_in_order) - 0.5)
     ax.set_yticks(range(len(modes_in_order)))
@@ -871,6 +897,12 @@ def _plot_bubbles_for_config(
     )
     axes = axes[0]
 
+    # Shared x cap across method subplots: largest observed seat count or the
+    # proportional-representation line, padded and capped at total_seats.
+    total_seats = config["total_seats"]
+    seat_max = max(counts["focal_seats"].max(), iprop * total_seats)
+    x_upper = _seat_axis_upper(seat_max, total_seats)
+
     for ax, method in zip(axes, methods):
         _draw_method_bubbles(
             ax,
@@ -879,6 +911,7 @@ def _plot_bubbles_for_config(
             size_scale,
             iprop,
             config,
+            x_upper,
         )
         ax.set_xlabel("Citywide Seats Won", fontsize=9)
 
@@ -1028,8 +1061,9 @@ def plot_combined_bubbles_all_runs(
     if n_runs == 1:
         axes = [axes]
 
-    x_tick_step = X_TICK_STEP
-    x_ticks = range(0, total_seats + x_tick_step, x_tick_step)
+    # Cap the seat axis near the data so the grid isn't mostly empty.
+    x_upper = _seat_axis_upper(max(observed_max_seats, i_share), total_seats)
+    x_ticks = range(0, x_upper + 1, X_TICK_STEP)
 
     for ax, (_, label, per_mode) in zip(axes, runs):
         for mode in modes_in_order:
@@ -1054,7 +1088,7 @@ def plot_combined_bubbles_all_runs(
 
         ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)
 
-        ax.set_xlim(-1, total_seats + x_tick_step)
+        ax.set_xlim(-1, x_upper + 1)
         # Inverted y-axis: y=0 sits below the headroom band reserved for the title.
         # Scale the headroom with ROW_SPACING so it stays ~one row's worth of space.
         ax.set_ylim(y_top + ROW_SPACING * 0.5, -ROW_SPACING * 1.5)

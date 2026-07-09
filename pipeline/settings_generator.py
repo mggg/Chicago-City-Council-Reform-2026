@@ -9,6 +9,7 @@ and district.
 
 import json
 import gzip
+import random
 import geopandas as gpd
 from pathlib import Path
 import jsonlines as jl
@@ -100,6 +101,169 @@ def _validate_bloc_config(config, bloc_definitions):
                 )
 
 
+def _apportion_counts(proportions, total):
+    """
+    Apportion `total` whole units across the keys of `proportions` in proportion
+    to their shares, using the largest-remainder (Hamilton) method.
+
+    A key whose share is small enough relative to the others may be apportioned
+    zero units — there is no guaranteed floor. Ties in the remainder are broken
+    by dict order, which is insertion order and therefore deterministic given a
+    fixed config.
+
+    Args:
+        proportions: Dict mapping key -> share of the total (sums to ~1).
+        total: Total whole units to distribute; must be >= 0.
+
+    Returns:
+        Dict mapping each key to its apportioned integer count (some may be 0),
+        summing to total.
+    """
+    if total < 0:
+        raise ValueError(f"total_candidates ({total}) must be non-negative.")
+
+    keys = list(proportions)
+    quotas = {k: proportions[k] * total for k in keys}
+    counts = {k: int(quotas[k]) for k in keys}
+
+    leftover = total - sum(counts.values())
+    remainder_order = sorted(keys, key=lambda k: quotas[k] - counts[k], reverse=True)
+    for k in remainder_order[:leftover]:
+        counts[k] += 1
+
+    return counts
+
+
+def _apply_candidate_noise(counts, noise_probability):
+    """
+    Independently perturb each slate's candidate count by at most one candidate.
+
+    For each slate: with probability `noise_probability`, remove one candidate;
+    with probability `noise_probability`, add one candidate; otherwise (probability
+    1 - 2 * noise_probability) leave the count unchanged. Counts are clamped at 0.
+
+    Args:
+        counts: Dict mapping slate -> apportioned candidate count.
+        noise_probability: Float in [0, 0.5]. 0 disables noise entirely.
+
+    Returns:
+        Dict mapping each slate to its (possibly perturbed) count.
+    """
+    if noise_probability == 0:
+        return dict(counts)
+
+    if not (0 <= noise_probability <= 0.5):
+        raise ValueError(
+            f"candidate_noise_probability ({noise_probability}) must be between 0 and 0.5."
+        )
+
+    perturbed = {}
+    for slate, count in counts.items():
+        roll = random.random()
+        if roll < noise_probability:
+            delta = -1
+        elif roll < 2 * noise_probability:
+            delta = 1
+        else:
+            delta = 0
+        perturbed[slate] = max(0, count + delta)
+    return perturbed
+
+
+def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_probability=0):
+    """
+    Build a district-specific slate_to_candidates mapping sized proportionally
+    to each slate's share of modeled VAP in this district.
+
+    Slates apportioned zero candidates (whether from the base apportionment or
+    from noise knocking a count to 0) are omitted entirely — VoteKit's
+    BlocSlateConfig rejects a slate with an empty candidate list, so a slate
+    with negligible population share simply doesn't run in that district.
+
+    Args:
+        row: Row from the district population dataframe.
+        slate_columns: Dict mapping each slate to its VAP column name.
+        total_candidates: Total number of candidates to distribute across slates
+            before noise is applied.
+        noise_probability: Float in [0, 0.5] giving the independent per-slate
+            probability of adding or removing one candidate after apportionment.
+            Defaults to 0 (no noise).
+
+    Returns:
+        Dict mapping each slate with a nonzero (post-noise) count to a list of
+        candidate ids, e.g. {"W": ["W1", "W2"]}.
+    """
+    slates = list(slate_columns)
+    weighted = {s: float(row[slate_columns[s]]) for s in slates}
+    denom = sum(weighted.values())
+    if denom > 0:
+        proportions = {s: weighted[s] / denom for s in slates}
+    else:
+        proportions = {s: 1.0 / len(slates) for s in slates}
+
+    counts = _apportion_counts(proportions, total_candidates)
+    counts = _apply_candidate_noise(counts, noise_probability)
+    return {
+        s: [f"{s}{i}" for i in range(1, counts[s] + 1)]
+        for s in slates
+        if counts[s] > 0
+    }
+
+
+def _filter_cohesion_to_slates(cohesion_parameters, active_slates):
+    """
+    Restrict each bloc's cohesion row to the active slates and renormalize so
+    each row still sums to 1.
+
+    Dropping a slate from a district removes the candidate-facing column
+    entirely (VoteKit requires cohesion_df columns to match slate_to_candidates
+    exactly), so the cohesion mass a bloc had assigned to the dropped slate is
+    redistributed proportionally across the slates still running.
+
+    Args:
+        cohesion_parameters: Dict mapping bloc -> {slate: cohesion value}.
+        active_slates: Iterable of slate labels with a nonzero candidate count.
+
+    Returns:
+        Dict with the same bloc keys, each row restricted to active_slates and
+        renormalized to sum to 1.
+
+    Raises:
+        ValueError: If a bloc's cohesion mass is entirely on dropped slates,
+            leaving nothing to renormalize.
+    """
+    active_slates = list(active_slates)
+    result = {}
+    for bloc, row in cohesion_parameters.items():
+        restricted = {s: row[s] for s in active_slates}
+        total = sum(restricted.values())
+        if total <= 0:
+            raise ValueError(
+                f"cohesion_parameters['{bloc}'] has no remaining mass once slates "
+                f"outside {active_slates} are dropped; cannot renormalize."
+            )
+        result[bloc] = {s: v / total for s, v in restricted.items()}
+    return result
+
+
+def _filter_alphas_to_slates(alphas, active_slates):
+    """
+    Restrict each bloc's Dirichlet alpha row to the active slates.
+
+    Unlike cohesion parameters, alphas aren't required to sum to 1, so dropped
+    slates are simply removed with no renormalization needed.
+
+    Args:
+        alphas: Dict mapping bloc -> {slate: alpha value}.
+        active_slates: Iterable of slate labels with a nonzero candidate count.
+
+    Returns:
+        Dict with the same bloc keys, each row restricted to active_slates.
+    """
+    active_slates = list(active_slates)
+    return {bloc: {s: row[s] for s in active_slates} for bloc, row in alphas.items()}
+
+
 def _build_district_settings(row, config, group_columns, bloc_definitions):
     """
     Compute turnout-adjusted bloc proportions and population values for a district.
@@ -155,7 +319,17 @@ def generate_settings(config):
         outputs/settings/<run_name>_settings/<district_count>/<run_name>_<district_count>_sample_settings_district_plan_<plan_idx>_district_<district_id>.json.
         where <plan_idx> is the zero-based chain sample index and <district_id> is the district label.
         bloc_proportions in each file are turnout-adjusted focal group proportions.
+        slate_to_candidates in each file is resized per-district: total_candidates (default:
+        the candidate count from config's slate_to_candidates) is apportioned across slates
+        in proportion to each slate's share of modeled VAP in that district, then perturbed
+        by candidate_noise_probability (default 0). A slate whose count reaches zero (from
+        apportionment or noise) is dropped from slate_to_candidates, and its column is
+        dropped (with cohesion_parameters renormalized) from that district's
+        cohesion_parameters and alphas.
     """
+    random.seed(config["seed"])
+    noise_probability = config.get("candidate_noise_probability", 0)
+
     bloc_definitions = get_bloc_definitions(config)
     _validate_bloc_config(config, bloc_definitions)
     # The demographic groups we need VAP for are the union across all blocs.
@@ -163,10 +337,15 @@ def generate_settings(config):
         g for groups in bloc_definitions.values() for g in groups
     ))
     group_columns = get_group_vap_columns(config, demographic_groups)
+    slate_columns = get_group_vap_columns(config, config["slate_to_candidates"].keys())
+    total_candidates = config.get(
+        "total_candidates",
+        sum(len(v) for v in config["slate_to_candidates"].values()),
+    )
 
     population_data = gpd.read_file(config['geodata_path'])
     needed_columns = list(dict.fromkeys(
-        list(group_columns.values()) + [config['population_vap_column']]
+        list(group_columns.values()) + list(slate_columns.values()) + [config['population_vap_column']]
     ))
     population_data = population_data[needed_columns]
 
@@ -176,7 +355,9 @@ def generate_settings(config):
     subsample_interval = chain_length // num_subsamples   
 
     # pull only the relevant keys from config to pass downstream
-    district_params = ['num_voters', 'slate_to_candidates', 'cohesion_parameters', 'alphas']
+    # (slate_to_candidates, cohesion_parameters, and alphas are computed
+    # per-district below, not passed through as-is)
+    district_params = ['num_voters']
     output_settings = {k:config[k] for k in config if k in district_params}
     run_name = config['run_name']
 
@@ -203,7 +384,17 @@ def generate_settings(config):
                 for _, row in data_by_district.iterrows():
                     district = row.name
                     district_settings = _build_district_settings(row, config, group_columns, bloc_definitions)
-                    settings = output_settings | district_settings
+                    slate_to_candidates = _build_slate_to_candidates(
+                        row, slate_columns, total_candidates, noise_probability
+                    )
+                    active_slates = list(slate_to_candidates)
+                    cohesion_parameters = _filter_cohesion_to_slates(config["cohesion_parameters"], active_slates)
+                    alphas = _filter_alphas_to_slates(config["alphas"], active_slates)
+                    settings = output_settings | district_settings | {
+                        "slate_to_candidates": slate_to_candidates,
+                        "cohesion_parameters": cohesion_parameters,
+                        "alphas": alphas,
+                    }
                     with open(
                         f"{settings_folder}/{run_name}_{district_num}_sample_settings_district_plan_{sample_idx:03d}_district_{district:02d}.json",
                         "w",

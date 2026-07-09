@@ -9,7 +9,7 @@ to CSV files for downstream election simulations.
 from votekit.ballot_generator import (
     BlocSlateConfig,
     slate_pl_profile_generator,
-    slate_bt_profile_generator_using_mcmc,
+    slate_bt_profile_generator,
     cambridge_profile_generator,
 )
 
@@ -27,7 +27,7 @@ import gzip
 # generator, at the cost of an approximate ballot-type distribution.
 generator_name_to_function = {
     "slate_pl": slate_pl_profile_generator,
-    "slate_bt": slate_bt_profile_generator_using_mcmc,
+    "slate_bt": slate_bt_profile_generator,
     "cambridge": cambridge_profile_generator,
 }
 

@@ -2,8 +2,8 @@
 Generate voter preference profiles from district-level settings files.
 
 Reads VoteKit settings JSON files, generates synthetic voter profiles for
-each district, voter model, and replicate, and writes the resulting profiles
-to CSV files for downstream election simulations.
+each district, voter model, and replicate, and bundles the resulting profiles
+into a single zip archive per run for downstream election simulations.
 """
 
 from votekit.ballot_generator import (
@@ -20,7 +20,7 @@ from pathlib import Path
 from pipeline.utils.helpers import load_json, get_voter_models
 import json
 import time
-import gzip
+import zipfile
 
 # maps mode name to votekit profile generator function. slate_bt uses the MCMC
 # sampler (O(voters), no ballot-type enumeration) — far faster than the exact
@@ -31,19 +31,24 @@ generator_name_to_function = {
     "cambridge": cambridge_profile_generator,
 }
 
-def process_settings_file(settings_file, profile_folder, mode, duplicate_indx):
+def process_settings_file(settings_file, mode, duplicate_indx):
     """
-    Generate a voter profile csv for a single district using the given voter model.
+    Generate a voter profile for a single district using the given voter model.
+
+    Runs entirely in memory (no filesystem write) so it can be called from a
+    parallel worker and have its result written into the run's shared zip
+    archive by the caller, avoiding concurrent writes to one zip file.
 
     Args:
         settings_file: Path to a votekit settings json file for one district.
-        profile_folder: Directory where the output csv will be written.
         mode: Voter model name; one of "slate_pl", "slate_bt", or "cambridge".
         duplicate_indx: Replicate index, appended as _v<n> in the output filename.
 
-    Outputs:
-        A csv file in profile_folder with "sample_settings" replaced by "profile" in the
-        settings file stem, suffixed with _v<duplicate_indx>.
+    Returns:
+        (filename, csv_text): filename is the settings file's stem with
+        "sample_settings" replaced by "profile" and "_v<duplicate_indx>.csv"
+        appended; csv_text is the profile's CSV content (per votekit's
+        PreferenceProfile.to_csv()).
     """
     settings = load_json(settings_file)
 
@@ -57,27 +62,25 @@ def process_settings_file(settings_file, profile_folder, mode, duplicate_indx):
     config.set_dirichlet_alphas(settings["alphas"])
     setting_file_stem = Path(settings_file).stem
 
-    output_file = (
-        profile_folder
-        / f"{setting_file_stem.replace('sample_settings', 'profile')}_v{duplicate_indx}.csv.gz"
-    )
+    filename = f"{setting_file_stem.replace('sample_settings', 'profile')}_v{duplicate_indx}.csv"
     profile = generator_name_to_function[mode](config)
+    csv_text = profile.to_csv()
 
-    profile_csv = profile.to_csv()
-
-    with gzip.open(output_file, "wt", encoding="utf-8") as file: 
-        writer = file.write(profile_csv)
+    return filename, csv_text
 
 
 def generate_profiles(config):
     """
-    Generate voter profile csvs for all districts, modes, and replicates in the config.
+    Generate voter profiles for all districts, modes, and replicates in the config,
+    bundling them into a single zip archive per run.
 
     Args:
         config: Parsed config dict.
 
     Outputs:
-        csv files at outputs/profiles/<run_name>/<mode>/<district_num>/*.csv.
+        outputs/<run_name>/profiles.zip, containing one csv entry per
+        (mode, district_num, settings file, replicate) at
+        "<mode>/<district_num>/<...>_v<duplicate_indx>.csv".
     """
 
     num_reps = config['num_reps']
@@ -97,27 +100,34 @@ def generate_profiles(config):
             "voter_models or reduce to 2 slates."
         )
 
-    # repeat for each replicate
-    for duplicate_indx in range(num_reps):
-        rep_start = time.perf_counter()
-        print(f"[rep {duplicate_indx + 1}/{num_reps}] Start at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        district_nums =  [d_config['num_districts'] for d_config in config['district_configs']]
-        for district_num in district_nums:
-            for mode in models:
-                settings_folder = Path(f"outputs/{run_name}/settings/{district_num}")
-                profile_folder = Path(f"outputs/{run_name}/profiles/{mode}/{district_num}")
-                profile_folder.mkdir(exist_ok=True, parents=True)
+    zip_path = Path(f"outputs/{run_name}/profiles.zip")
+    zip_path.parent.mkdir(exist_ok=True, parents=True)
 
-                all_settings_files = glob(f"{settings_folder}/*.json")
-    
-                with joblib_progress(
-                    description=f"[rep {duplicate_indx + 1:03d}/{num_reps}] Generating VK profiles for {district_num:02d} districts and voter model {mode}",
-                    total=len(all_settings_files),
-                ):
-                    Parallel(n_jobs=-1)(
-                        delayed(process_settings_file)(settings_file, profile_folder, mode, duplicate_indx)
-                        for settings_file in all_settings_files
-                    )
-        rep_elapsed = time.perf_counter() - rep_start
-        print(f"[rep {duplicate_indx + 1}/{num_reps}] Done in {rep_elapsed:.1f}s")
+    # Opened once for the whole run: workers only compute (filename, csv_text)
+    # pairs in parallel, and every actual write to the shared archive happens
+    # here, sequentially, in the main process.
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        # repeat for each replicate
+        for duplicate_indx in range(num_reps):
+            rep_start = time.perf_counter()
+            print(f"[rep {duplicate_indx + 1}/{num_reps}] Start at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            district_nums =  [d_config['num_districts'] for d_config in config['district_configs']]
+            for district_num in district_nums:
+                for mode in models:
+                    settings_folder = Path(f"outputs/{run_name}/settings/{district_num}")
+                    all_settings_files = glob(f"{settings_folder}/*.json")
+
+                    with joblib_progress(
+                        description=f"[rep {duplicate_indx + 1:03d}/{num_reps}] Generating VK profiles for {district_num:02d} districts and voter model {mode}",
+                        total=len(all_settings_files),
+                    ):
+                        results = Parallel(n_jobs=-1)(
+                            delayed(process_settings_file)(settings_file, mode, duplicate_indx)
+                            for settings_file in all_settings_files
+                        )
+
+                    for filename, csv_text in results:
+                        archive.writestr(f"{mode}/{district_num}/{filename}", csv_text)
+            rep_elapsed = time.perf_counter() - rep_start
+            print(f"[rep {duplicate_indx + 1}/{num_reps}] Done in {rep_elapsed:.1f}s")
 

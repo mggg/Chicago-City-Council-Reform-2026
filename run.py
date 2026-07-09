@@ -6,6 +6,7 @@ from glob import glob
 import json
 import sys
 import gzip
+import zipfile
 from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
@@ -88,8 +89,8 @@ def has_valid_settings(config):
 
 def has_valid_profiles(config):
     run = config["run_name"]
-    base = Path("outputs") / run / "profiles"
-    if not base.is_dir():
+    zip_path = Path("outputs") / run / "profiles.zip"
+    if not zip_path.is_file():
         print("Profiles do not exist. Running pipeline from profiles stage.")
         return False
     expected_per_mode = (
@@ -97,8 +98,14 @@ def has_valid_profiles(config):
         * sum(d["num_districts"] for d in config["district_configs"])
         * config["num_reps"]
     )
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            members = archive.namelist()
+    except zipfile.BadZipFile:
+        print("Profiles archive is corrupt. Running pipeline from profiles stage.")
+        return False
     for mode in get_voter_models(config):
-        count = sum(1 for f in (base / mode).rglob("*.csv.gz") if f.stat().st_size > 0)
+        count = sum(1 for n in members if n.startswith(f"{mode}/") and n.endswith(".csv"))
         if count != expected_per_mode:
             print(f"Missing valid settings for {mode} mode. Running pipeline from profiles stage.")
             return False
@@ -224,7 +231,7 @@ def run_pipeline(config):
 
 
 def main():
-    configurations = load_all_config_files(config_dir="testing/configs")
+    configurations = load_all_config_files(config_dir="configs")
 
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

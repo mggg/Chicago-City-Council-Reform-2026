@@ -42,11 +42,13 @@ METHOD_NAME_MAP = {
     "irv": "IRV",
 }
 
-# Fixed colors / labels so every figure reads the same way.
+# Fixed colors / labels so every figure reads the same way. Hues are the
+# colorblind-validated categorical palette, assigned in DESIRED_ORDER (never
+# cycled) so identity stays consistent across every figure.
 MODE_COLORS = {
-    "cambridge": "#E32636",
-    "slate_bt": "#FFBF00",
-    "slate_pl": "#8DB600",
+    "slate_pl": "#2a78d6",    # blue
+    "slate_bt": "#1baf7a",    # aqua
+    "cambridge": "#eda100",   # yellow
 }
 
 # Pseudo-mode that pools occurrences across every voter model into one row.
@@ -533,11 +535,17 @@ def _ordered_mode_handles(ax):
 def _build_mode_legend(ax, ref_handles=None, ref_labels=None) -> None:
     """Draw a legend of modes (renamed via LEGEND_MAPPING, in DESIRED_ORDER),
     optionally followed by the reference-line entries (share of VAP, combined
-    support) so their descriptions live in the legend instead of on the plot."""
+    support) so their descriptions live in the legend instead of on the plot.
+    Placed below the axes, outside the histogram itself, so it doesn't crowd
+    the bars."""
     ordered_handles, ordered_labels = _ordered_mode_handles(ax)
     handles = ordered_handles + list(ref_handles or [])
     labels = ordered_labels + list(ref_labels or [])
-    ax.legend(handles, labels, fontsize=8)
+    ax.legend(
+        handles, labels, fontsize=8,
+        loc="upper center", bbox_to_anchor=(0.5, -0.18),
+        ncol=2, frameon=False,
+    )
 
 
 def _draw_reference_lines(ax, config, iprop, i_cs_turnout: float, ylim: float, label=None):
@@ -556,8 +564,11 @@ def _draw_reference_lines(ax, config, iprop, i_cs_turnout: float, ylim: float, l
     """
     total_seats = config["total_seats"]
     group_label = label if label is not None else _group_label(config["focal_group"])
-    color_cs = "xkcd:brownish grey"
-    color_iprop = "xkcd:purplish brown"
+    # Reference lines are annotations, not competing series identity, so they stay
+    # off hue entirely (ink tones, distinguished by linestyle/weight) rather than
+    # risking a CVD-ambiguous hue pair with the mode bars.
+    color_cs = "#0b0b0b"      # primary ink, solid
+    color_iprop = "#52514e"   # secondary ink, dotted
 
     i_cs_share = i_cs_turnout * total_seats
     i_share = iprop * total_seats if iprop is not None else None
@@ -741,13 +752,16 @@ def plot_slate_representation_panels(
 BUBBLE_MAX_AREA = 150
 BUBBLE_MIN_AREA = 10
 
-# Color of the focal-group proportional-representation reference line (matches
-# the "<focal group> share of VAP" line on the histograms).
-PROP_LINE_COLOR = "orangered"
+# Color of the focal-group proportional-representation reference line (same role,
+# and same secondary-ink treatment, as the "<focal group> share of VAP" line on
+# the histograms — an annotation, not a competing series hue).
+PROP_LINE_COLOR = "#52514e"
 
-# Single fill color for individual-mode bubbles; Combined uses a distinct dark color.
-BUBBLE_COLOR = "#4C72B0"
-COMBINED_BUBBLE_COLOR = "#222222"
+# Fallback fill for a mode not in MODE_COLORS (muted ink, distinct from every
+# categorical hue so it reads as "other" rather than impersonating a real mode).
+# Combined pools every mode, so it gets primary ink instead of a hue.
+BUBBLE_COLOR = "#898781"
+COMBINED_BUBBLE_COLOR = "#0b0b0b"
 
 
 def _occurrence_counts(df_plan: pd.DataFrame) -> pd.DataFrame:

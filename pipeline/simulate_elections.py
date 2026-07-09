@@ -1,18 +1,17 @@
 """
 Run elections on generated voter profiles and record the winners.
 
-Reads voter profile CSV files and runs the appropriate election 
-rule (STV for multi-seat districts, plurality and IRV for single-seat districts), 
-and writes aggregated election results to JSON files.
+Reads voter profiles bundled in the run's profiles.zip archive and runs the
+appropriate election rule (STV for multi-seat districts, plurality and IRV for
+single-seat districts), and writes aggregated election results to JSON files.
 """
 
 import json
-import gzip
+import zipfile
 import csv
 import os
 import inspect
 import tempfile
-from glob import glob
 from pathlib import Path
 from joblib import Parallel, delayed
 from votekit import RankProfile, ScoreProfile, elections
@@ -86,15 +85,18 @@ def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
     return winners
 
 def _process_profile(
-    profile_file: str | Path,
+    zip_path: str | Path,
+    member_name: str,
     election_plan: List[tuple],
     voting_configs: dict,
 ) -> dict:
     """
-    Load a voter profile csv and run each configured election to determine winners.
+    Load a voter profile csv from the run's profiles.zip and run each configured
+    election to determine winners.
 
     Args:
-        profile_file: Path to the voter profile csv.
+        zip_path: Path to the run's profiles.zip archive.
+        member_name: Name of the profile csv entry within the archive.
         election_plan: Precomputed (rule, election_class, profile_class) tuples
             from _build_election_plan; avoids per-file class lookup/introspection.
         voting_configs: Election and voting settings specified in configuration files.
@@ -105,7 +107,6 @@ def _process_profile(
     TO-DO: Figure out how to use RankProfile OR ScoreProfile for BlockPlurality if desired.
         Current default is RankProfile.
     """
-    profile_path = Path(profile_file)
     results = {}
 
     # Parse each distinct profile type from the csv at most once and reuse it
@@ -117,19 +118,19 @@ def _process_profile(
         profile = profile_cache.get(profile_class)
         if profile is None:
 
-            # Since neither RankProfile nor ScoreProfile can read compressed
-            # CSV files, we decompress to a unique temp file and delete it
-            # after loading. Using NamedTemporaryFile avoids collisions between
-            # parallel workers processing different profiles concurrently.
+            # Neither RankProfile nor ScoreProfile can read a zip member (or any
+            # in-memory stream) directly, so extract to a unique temp file and
+            # delete it after loading. Using NamedTemporaryFile avoids collisions
+            # between parallel workers processing different profiles concurrently;
+            # each worker opens its own ZipFile handle onto the same archive on
+            # disk, which is safe for concurrent reads.
             with tempfile.NamedTemporaryFile(
-                mode='w', suffix='.csv', delete=False, encoding='utf-8'
+                mode='wb', suffix='.csv', delete=False
             ) as tmp:
                 temp_path = Path(tmp.name)
-                with gzip.open(profile_path, 'rt', encoding='utf-8') as infile:
-                    reader = csv.reader(infile)
-                    writer = csv.writer(tmp)
-                    for row in reader:
-                        writer.writerow(row)
+                with zipfile.ZipFile(zip_path) as archive:
+                    with archive.open(member_name) as infile:
+                        tmp.write(infile.read())
 
             try:
                 profile = profile_class.from_csv(temp_path)
@@ -214,19 +215,21 @@ def simulate_elections(config) -> None:
     # under the debugger (joblib worker subprocesses are not debugged otherwise).
     n_jobs = -1
 
-    out_root = Path("outputs") / f'{run_name}' / "election_results" 
+    out_root = Path("outputs") / f'{run_name}' / "election_results"
     out_root.mkdir(parents=True, exist_ok=True)
+
+    zip_path = Path(f"outputs/{run_name}/profiles.zip")
+    with zipfile.ZipFile(zip_path) as archive:
+        all_members = archive.namelist()
 
     # run elections for each voter model
     for mode in modes:
-        # profile path
-        profile_folder = Path(f"./outputs/{run_name}/profiles/{mode}/")
-
         output_dir = out_root / mode
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for dc in district_configs:
-            all_profile_files = glob(f"{profile_folder}/{dc.num_districts}/*.csv.gz")
+            prefix = f"{mode}/{dc.num_districts}/"
+            all_profile_files = [n for n in all_members if n.startswith(prefix) and n.endswith(".csv")]
 
             desc = f"Running elections for {dc.num_districts} districts, {dc.winners} winner(s), mode={mode}"
             if joblib_progress is not None:
@@ -237,13 +240,13 @@ def simulate_elections(config) -> None:
             if ctx is not None:
                 with ctx:
                     results_list = Parallel(n_jobs=n_jobs)(
-                        delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                        delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
                     )
 
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
                 results_list = Parallel(n_jobs=n_jobs)(
-                    delayed(_process_profile)(pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                    delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
                 )
 
 

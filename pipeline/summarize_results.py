@@ -28,7 +28,11 @@ from pipeline.utils.helpers import (
     find_settings_file,
     get_voter_models,
 )
-from pipeline.settings_generator import get_bloc_definitions, get_group_vap_columns
+from pipeline.settings_generator import (
+    get_bloc_definitions,
+    get_group_vap_columns,
+    DEFAULT_GROUP_VAP_COLUMNS,
+)
 
 
 # Map the raw method keys emitted by simulate_elections to display names.
@@ -81,23 +85,59 @@ def _group_label(group: str) -> str:
 # --- Representation baselines --------------------------------------------------
 
 
+def get_focal_slates(config) -> List[str]:
+    """
+    Resolve config["focal_group"] to the slate(s) it represents.
+
+    - A slate key (e.g. "A") -> [that slate].
+    - A bloc key (e.g. "W-A") -> its constituent groups (from get_bloc_definitions)
+      that are actually slates in slate_to_candidates, so a focal bloc aggregates
+      the candidate slates it corresponds to.
+    - Anything else -> [focal_group] (count_focal_winners' prefix fallback still
+      applies for single-character codes).
+    """
+    focal = str(config["focal_group"])
+    slates = set(config.get("slate_to_candidates", {}))
+    if focal in slates:
+        return [focal]
+    blocs = get_bloc_definitions(config)
+    if focal in blocs:
+        resolved = [g for g in blocs[focal] if g in slates]
+        if resolved:
+            return resolved
+    return [focal]
+
+
 def _focal_population_share(config, gdf) -> float:
     """
     Citywide focal-group population proportion, straight from the geodata.
 
-    This is the *overall* focal share before any districting, used as the
-    "proportional representation" population baseline on each figure.
+    Used as the "proportional representation" population baseline on each figure.
+    For a single-slate focal group this is pop_of_interest_column / total VAP
+    (unchanged). For an aggregate focal group (a bloc such as "W-A") it sums the
+    VAP columns of the constituent slates instead.
     """
-    # vap  = total (voting-age) population across all precincts
-    # ivap = population of the group of interest (the focal group) across all precincts
-    vap = float(gdf[config["population_vap_column"]].sum())
-    ivap = float(gdf[config["pop_of_interest_column"]].sum())
-    return ivap / vap  # raw focal-group population proportion
+    total_vap = float(gdf[config["population_vap_column"]].sum())
+    if total_vap <= 0:
+        return 0.0
+
+    # Derive the focal population from the focal slate(s)' own VAP column(s), so
+    # the baseline tracks whatever focal_group is set to (a single slate like "A"
+    # or a bloc like "W-A"). Falls back to the explicit pop_of_interest_column only
+    # when a focal slate has no VAP-column mapping.
+    focal_slates = get_focal_slates(config)
+    mapping = config.get("group_vap_columns", DEFAULT_GROUP_VAP_COLUMNS)
+    cols = [mapping[s] for s in focal_slates if s in mapping and mapping[s] in gdf.columns]
+    if cols:
+        focal_vap = sum(float(gdf[c].sum()) for c in cols)
+    else:
+        focal_vap = float(gdf[config["pop_of_interest_column"]].sum())
+    return focal_vap / total_vap
 
 
-def _combined_support(config, gdf) -> float:
+def _combined_support(config, gdf, focal_slate=None) -> float:
     """
-    Citywide vote share that flows to the focal slate.
+    Citywide vote share that flows to a slate (defaults to the focal slate).
 
     Each voter bloc's turnout-adjusted share of the electorate is weighted by that
     bloc's cohesion toward the focal slate, then summed over all blocs:
@@ -111,7 +151,7 @@ def _combined_support(config, gdf) -> float:
     stage uses (get_bloc_definitions / get_group_vap_columns), so a "W-A" bloc sums
     White + Asian VAP.
     """
-    focal_slate = str(config["focal_group"])
+    focal_slate = str(focal_slate if focal_slate is not None else config["focal_group"])
     cohesion = config["cohesion_parameters"]
     turnout = config["turnout"]
 
@@ -146,8 +186,37 @@ def _compute_representation_baselines(config) -> Tuple[float, float]:
     """
     gdf = gpd.read_file(Path(config["geodata_path"]))
     iprop = _focal_population_share(config, gdf)
-    i_cs_turnout = _combined_support(config, gdf)
+    # Combined support is additive across disjoint slates, so an aggregate focal
+    # group sums the combined support of its constituent slates.
+    i_cs_turnout = sum(
+        _combined_support(config, gdf, focal_slate=s) for s in get_focal_slates(config)
+    )
     return iprop, i_cs_turnout
+
+
+def _slate_baselines(config) -> Dict[str, Tuple[Optional[float], float]]:
+    """
+    Per-slate representation baselines for the by-slate histogram panel.
+
+    Returns:
+        {slate: (iprop, i_cs)} where iprop is that slate's demographic share of
+        total VAP (None if the slate has no VAP column mapping) and i_cs is its
+        combined support (citywide vote share flowing to that slate).
+    """
+    gdf = gpd.read_file(Path(config["geodata_path"]))
+    total_vap = float(gdf[config["population_vap_column"]].sum())
+    mapping = config.get("group_vap_columns", DEFAULT_GROUP_VAP_COLUMNS)
+
+    out: Dict[str, Tuple[Optional[float], float]] = {}
+    for slate in config["slate_to_candidates"]:
+        col = mapping.get(slate)
+        iprop = (
+            float(gdf[col].sum()) / total_vap
+            if col and col in gdf.columns and total_vap > 0
+            else None
+        )
+        out[slate] = (iprop, _combined_support(config, gdf, focal_slate=slate))
+    return out
 
 
 # --- Filesystem layout ---------------------------------------------------------
@@ -218,9 +287,12 @@ def _rows_from_results_file(
     """
     run_name = str(config["run_name"])
     focal_group = str(config["focal_group"])
-    # slate_to_candidates maps a bloc label (e.g. "A") to the candidate ids it ran.
+    # slate_to_candidates maps a slate label (e.g. "A") to the candidate ids it ran.
     # It is optional here: count_focal_winners can fall back to a prefix match.
     slate_to_candidates = config.get("slate_to_candidates", {}) or {}
+    # The focal group may be a single slate ("A") or a bloc ("W-A") that aggregates
+    # several slates; count winners across all of them.
+    focal_slates = get_focal_slates(config)
 
     data = load_json(rf)
 
@@ -264,12 +336,11 @@ def _rows_from_results_file(
         # single-winner district under Plurality and IRV), so we emit one
         # row per method, each with its own focal-seat count.
         for method_key, winners in result.items():
-            focal_seats = count_focal_winners(
-                winners,
-                focal_group,
-                slate_to_candidates,
+            focal_seats = sum(
+                count_focal_winners(winners, s, slate_to_candidates)
+                for s in focal_slates
             )
-            rows.append({
+            row = {
                 "run_name": run_name,
                 "plan": plan,
                 "num_districts": district_num,
@@ -284,7 +355,11 @@ def _rows_from_results_file(
                 config["population_vap_column"]: total_vap,
                 config["pop_of_interest_column"]: total_ivap,
                 "combined_support": i_cs_turnout,
-            })
+            }
+            # Per-slate seat counts feed the by-slate representation panel.
+            for slate in slate_to_candidates:
+                row[f"seats_{slate}"] = count_focal_winners(winners, slate, slate_to_candidates)
+            rows.append(row)
 
     return rows
 
@@ -332,19 +407,21 @@ def aggregate_to_plan_level(df: pd.DataFrame) -> pd.DataFrame:
     whole-map quantity, so we sum focal seats across that plan's districts. Each
     (plan, mode, method, replicate) becomes one data point in the histograms.
     """
+    # Sum focal seats plus every per-slate seat count (seats_<slate>) up to the plan.
+    seat_cols = [c for c in df.columns if c == "focal_seats" or c.startswith("seats_")]
     return (
         df.groupby(
             ["plan", "num_districts", "seats_per_district", "mode", "election_method", "rep"],
             as_index=False,
         )
-        .agg({"focal_seats": "sum"})
+        .agg({c: "sum" for c in seat_cols})
     )
 
 
 # --- Plotting ------------------------------------------------------------------
 
 
-def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
+def _draw_mode_histograms(ax, group_distn: pd.DataFrame, seat_col: str = "focal_seats") -> float:
     """
     Draw a grouped (dodged) bar histogram with one series per voter model.
 
@@ -374,7 +451,7 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame) -> float:
     max_bin_height = 0
 
     for i, mode in enumerate(modes_in_order):
-        seats = group_distn.loc[group_distn["mode"] == mode, "focal_seats"]
+        seats = group_distn.loc[group_distn["mode"] == mode, seat_col]
         if seats.empty:
             continue
 
@@ -428,8 +505,8 @@ def _style_axes(ax, config, focal_group: str, num_dist, seats_per_district, elm,
     ax.tick_params(axis="both", which="major", labelsize=8)
 
 
-def _build_mode_legend(ax) -> None:
-    """Draw a legend of modes only, renamed via LEGEND_MAPPING and in DESIRED_ORDER."""
+def _ordered_mode_handles(ax):
+    """Return (handles, labels) for the mode legend in DESIRED_ORDER, renamed via LEGEND_MAPPING."""
     handles, labels = ax.get_legend_handles_labels()
     handle_map = {label: handle for handle, label in zip(handles, labels) if label in LEGEND_MAPPING}
 
@@ -438,39 +515,39 @@ def _build_mode_legend(ax) -> None:
         if mode_key in handle_map:
             ordered_handles.append(handle_map[mode_key])
             ordered_labels.append(LEGEND_MAPPING[mode_key])
+    return ordered_handles, ordered_labels
 
+
+def _build_mode_legend(ax) -> None:
+    """Draw a legend of modes only, renamed via LEGEND_MAPPING and in DESIRED_ORDER."""
+    ordered_handles, ordered_labels = _ordered_mode_handles(ax)
     ax.legend(ordered_handles, ordered_labels, title="Mode", fontsize=8)
 
 
-def _draw_reference_lines(ax, config, iprop: float, i_cs_turnout: float, ylim: float) -> None:
+def _draw_reference_lines(ax, config, iprop, i_cs_turnout: float, ylim: float, label=None) -> None:
     """
-    Draw the two "proportional representation" reference lines and their labels.
+    Draw the "proportional representation" reference lines and their labels.
 
-    i_cs_share : seats implied by combined *support* (votes for focal cands).
-    i_share    : seats implied by raw focal-group *population* share.
-    Comparing where the histogram mass falls against these lines is the whole
-    point of the figure.
+    i_cs_share : seats implied by combined *support* (votes for the group's cands).
+    i_share    : seats implied by the group's raw *population* share (skipped when
+                 iprop is None, e.g. a slate with no VAP-column mapping).
+    label      : display name for the group (defaults to the focal group). Comparing
+    where the histogram mass falls against these lines is the whole point.
     """
     total_seats = config["total_seats"]
-    focal_label = _group_label(config["focal_group"])
+    group_label = label if label is not None else _group_label(config["focal_group"])
     color_cs = "xkcd:brownish grey"
     color_iprop = "xkcd:purplish brown"
 
     i_cs_share = i_cs_turnout * total_seats
-    i_share = iprop * total_seats
+    i_share = iprop * total_seats if iprop is not None else None
 
     # Nudge the two text labels apart so they don't overlap when the lines are
     # close: the leftmost line gets a right-aligned label and vice versa.
-    if i_cs_share < i_share:
-        i_cs_alignment = -0.3
-        i_share_alignment = 0.3
-        i_cs_ha = "right"
-        i_share_ha = "left"
+    if i_share is not None and i_cs_share < i_share:
+        i_cs_alignment, i_share_alignment, i_cs_ha, i_share_ha = -0.3, 0.3, "right", "left"
     else:
-        i_cs_alignment = 0.3
-        i_share_alignment = -0.3
-        i_cs_ha = "left"
-        i_share_ha = "right"
+        i_cs_alignment, i_share_alignment, i_cs_ha, i_share_ha = 0.3, -0.3, "left", "right"
 
     ax.axvline(i_cs_share, color=color_cs, linewidth=1)
     ax.text(
@@ -483,16 +560,17 @@ def _draw_reference_lines(ax, config, iprop: float, i_cs_turnout: float, ylim: f
         color=color_cs,
     )
 
-    ax.axvline(i_share, color=color_iprop, linestyle=":", linewidth=1)
-    ax.text(
-        i_share + i_share_alignment,
-        ylim * 0.90,
-        f"{focal_label} share of VAP\n{iprop * 100:.2f}%\n({i_share:.2f} seats)",
-        va="center",
-        ha=i_share_ha,
-        fontsize=8,
-        color=color_iprop,
-    )
+    if i_share is not None:
+        ax.axvline(i_share, color=color_iprop, linestyle=":", linewidth=1)
+        ax.text(
+            i_share + i_share_alignment,
+            ylim * 0.90,
+            f"{group_label} share of VAP\n{iprop * 100:.2f}%\n({i_share:.2f} seats)",
+            va="center",
+            ha=i_share_ha,
+            fontsize=8,
+            color=color_iprop,
+        )
 
 
 def _plot_one_histogram(
@@ -546,6 +624,85 @@ def plot_representation_histograms(
             i_cs_turnout,
             figs_dir,
             run_name,
+        )
+
+
+def _style_slate_axis(ax, config, slate: str, ylim: float) -> None:
+    """Spines, limits, ticks, and a per-slate subplot title for the by-slate panel."""
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+    total_seats = config["total_seats"]
+    ax.set_xlim(-1, total_seats + 1)
+    ax.set_ylim(0, ylim)
+    ax.set_xticks(range(0, total_seats + 1, X_TICK_STEP))
+    ax.set_xticklabels([str(x) for x in range(0, total_seats + 1, X_TICK_STEP)], fontsize=7)
+    ax.set_xlabel("Citywide Seats Won", fontsize=8)
+    ax.set_title(_group_label(slate), fontsize=10, fontweight="bold")
+    ax.tick_params(axis="both", which="major", labelsize=7)
+
+
+def _plot_slate_panel(
+    group_distn: pd.DataFrame,
+    num_dist,
+    seats_per_district,
+    elm,
+    config,
+    slate_baselines: Dict[str, Tuple[Optional[float], float]],
+    figs_dir: Path,
+    run_name: str,
+) -> None:
+    """Create and save one paneled by-slate representation figure (grid of histograms)."""
+    slates = list(config["slate_to_candidates"])
+    n = len(slates)
+    ncols = 2 if n > 1 else 1
+    nrows = (n + ncols - 1) // ncols
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 3.2 * nrows), squeeze=False)
+    flat = [ax for row in axes for ax in row]
+
+    for ax, slate in zip(flat, slates):
+        max_bin_height = _draw_mode_histograms(ax, group_distn, seat_col=f"seats_{slate}")
+        ylim = max_bin_height * 1.2 if max_bin_height > 0 else 1
+        _style_slate_axis(ax, config, slate, ylim)
+        iprop, i_cs = slate_baselines.get(slate, (None, 0.0))
+        _draw_reference_lines(ax, config, iprop, i_cs, ylim, label=_group_label(slate))
+
+    # Hide any unused cells in the grid.
+    for ax in flat[n:]:
+        ax.axis("off")
+
+    # One shared mode legend in the figure's top-right corner.
+    handles, labels = _ordered_mode_handles(flat[0])
+    if handles:
+        fig.legend(
+            handles, labels, title="Mode", fontsize=8,
+            loc="upper right", bbox_to_anchor=(0.99, 0.99),
+        )
+
+    fig.suptitle(
+        f"Election Outcomes by Slate\n{run_name}",
+        fontsize=12, fontweight="bold",
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{elm}_byslate.png"
+    fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_slate_representation_panels(
+    df_plan: pd.DataFrame,
+    config,
+    slate_baselines: Dict[str, Tuple[Optional[float], float]],
+    figs_dir: Path,
+    run_name: str,
+) -> None:
+    """Produce one by-slate representation panel per (district count, seats, method)."""
+    for (num_dist, seats_per_district, elm), group_distn in df_plan.groupby(
+        ["num_districts", "seats_per_district", "election_method"]
+    ):
+        _plot_slate_panel(
+            group_distn, num_dist, seats_per_district, elm,
+            config, slate_baselines, figs_dir, run_name,
         )
 
 
@@ -992,6 +1149,12 @@ def summarize_results(config) -> Path:
     plot_representation_histograms(
         df_plan, config, focal_group, iprop, i_cs_turnout, figs_dir, run_name
     )
+
+    # By-slate proportional-representation panel (one histogram per candidate slate).
+    if config.get("slate_to_candidates"):
+        plot_slate_representation_panels(
+            df_plan, config, _slate_baselines(config), figs_dir, run_name
+        )
 
     plot_representation_bubbles(df_plan, config, focal_group, iprop, figs_dir, run_name)
 

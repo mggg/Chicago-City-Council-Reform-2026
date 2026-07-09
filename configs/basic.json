@@ -13,7 +13,7 @@
 
   "chain_length": 10000,
 
-  "num_subsamples": 5,
+  "num_subsamples": 50,
 
   "total_seats": 50,
 

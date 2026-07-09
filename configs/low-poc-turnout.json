@@ -11,22 +11,22 @@
 
   "pop_of_interest_column": "asian_nhpi_vap_20",
 
-  "chain_length": 1000,
+  "chain_length": 10000,
 
-  "num_subsamples": 5,
+  "num_subsamples": 50,
 
   "total_seats": 50,
 
   "epsilon": 0.05,
 
   "voting_configs": {
-    "Plurality": { "tiebreak": "random" }
+    "FastSTV": { "n_seats": 5, "tiebreak": "random" }
   },
 
   "voter_models": ["slate_pl", "slate_bt"],
 
   "district_configs": [
-    { "num_districts": 50, "winners": 1 }
+    { "num_districts": 10, "winners": 5 }
   ],
 
   "blocs": {
@@ -35,7 +35,7 @@
     "H": ["H"]
   },
 
-  "turnout": { "W-A": 0.375, "B": 0.25, "H": 0.25 },
+  "turnout": { "W-A": 0.4529, "B": 0.25, "H": 0.25 },
 
   "num_voters": 10000,
 
@@ -60,7 +60,7 @@
     "H": { "W": 1, "B": 1, "H": 1, "A": 1 }
   },
 
-  "num_reps": 1,
+  "num_reps": 100,
 
   "seed": 42
 }

@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import gzip
 import geopandas as gpd
+import jsonlines as jl
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -1209,3 +1211,313 @@ def summarize_results(config) -> Path:
     print(f"[summarize_results] Wrote CSV: {csv_path}")
     print(f"[summarize_results] Figures in: {figs_dir}")
     return summary_dir
+
+
+def export_district_demographics_csv(
+    config,
+    output_path: Optional[Path] = None,
+) -> Optional[Path]:
+    """
+    Export per-district racial VAP demographics for every sampled plan in every
+    completed district-count ensemble, as a flat CSV.
+
+    Reads the district assignment chain(s) already generated under
+    outputs/districts/chain_out/<district_count>/ (one such ensemble per
+    distinct district count found there, e.g. 10 and 50). These are raw VAP
+    facts straight from the geodata, independent of any particular run's
+    turnout/cohesion/slate settings, so one export covers every run.
+
+    Args:
+        config: Any parsed config dict; only its geodata_path, chain_length,
+            num_subsamples, and (optionally) group_vap_columns are used, since
+            those are shared across every run.
+        output_path: Where to write the CSV. Defaults to
+            outputs/cross_run_summaries/district_demographics.csv.
+
+    Outputs:
+        A CSV with one row per (district_count, plan_idx, district_id), with
+        columns district_count, plan_idx, district_id, total_vap, then one
+        <group>_vap and <group>_share column pair per demographic group in
+        group_vap_columns (e.g. white_vap_20, white_vap_20_share, ...).
+
+    Returns:
+        Path to the written CSV, or None if no district-count ensembles were
+        found under outputs/districts/chain_out/.
+    """
+    chain_out_root = Path("outputs/districts/chain_out")
+    if not chain_out_root.is_dir():
+        print("[summarize_results] No district ensembles found; skipping demographics export.")
+        return None
+
+    district_counts = sorted(
+        int(p.name) for p in chain_out_root.iterdir() if p.is_dir() and p.name.isdigit()
+    )
+    if not district_counts:
+        print("[summarize_results] No district ensembles found; skipping demographics export.")
+        return None
+
+    group_columns = get_group_vap_columns(
+        config, config.get("group_vap_columns", DEFAULT_GROUP_VAP_COLUMNS).keys()
+    )
+    vap_cols = list(dict.fromkeys(group_columns.values()))
+    population_vap_col = config["population_vap_column"]
+
+    population_data = gpd.read_file(config["geodata_path"])
+    population_data = population_data[vap_cols + [population_vap_col]]
+
+    chain_length = config["chain_length"]
+    num_subsamples = config["num_subsamples"]
+    subsample_interval = chain_length // num_subsamples
+
+    rows: List[Dict[str, Any]] = []
+    for district_num in district_counts:
+        path_to_districting = chain_out_root / str(district_num) / f"{district_num}_districts.jsonl.gz"
+        if not path_to_districting.is_file():
+            continue
+
+        with gzip.open(path_to_districting, mode="rt", encoding="utf-8") as gz_file:
+            for sample_idx, sample in enumerate(jl.Reader(gz_file)):
+                if sample_idx % subsample_interval != 0:
+                    continue
+
+                population_data["district_plan"] = sample["assignment"]
+                data_by_district = population_data.groupby("district_plan").sum()
+
+                for district_id, row in data_by_district.iterrows():
+                    total_vap = float(row[population_vap_col])
+                    record = {
+                        "district_count": district_num,
+                        "plan_idx": sample_idx,
+                        "district_id": district_id,
+                        "total_vap": total_vap,
+                    }
+                    for col in vap_cols:
+                        vap = float(row[col])
+                        record[col] = vap
+                        record[f"{col}_share"] = vap / total_vap if total_vap > 0 else 0.0
+                    rows.append(record)
+
+    if not rows:
+        print("[summarize_results] No sampled plans found; skipping demographics export.")
+        return None
+
+    if output_path is None:
+        output_path = Path("outputs/cross_run_summaries/district_demographics.csv")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    pd.DataFrame(rows).to_csv(output_path, index=False)
+    print(f"[summarize_results] Wrote district demographics CSV: {output_path}")
+    return output_path
+
+
+# Fixed (group_column, display label, color) triples, in a stable order, for the
+# district-demographics boxplots. Colors are their own categorical set (green,
+# violet, red, orange) distinct from MODE_COLORS' blue/aqua/yellow, since a
+# racial-group series and a voter-model series are different variables that can
+# appear in the same report.
+DISTRICT_DEMOGRAPHIC_GROUPS = [
+    ("white_vap_20_share", "White", "#008300"),
+    ("bvap_20_share", "Black", "#4a3aa7"),
+    ("hvap_20_share", "Latino", "#e34948"),
+    ("asian_nhpi_vap_20_share", "Asian", "#eb6834"),
+]
+
+
+def plot_district_demographics(
+    csv_path: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
+) -> List[Path]:
+    """
+    Plot the distribution of each racial group's district-level VAP share,
+    pooling every district-instance across all sampled plans, one figure per
+    district-count ensemble.
+
+    Args:
+        csv_path: Path to the CSV written by export_district_demographics_csv.
+            Defaults to outputs/cross_run_summaries/district_demographics.csv.
+        output_dir: Where to write the figures. Defaults to
+            outputs/cross_run_summaries/figures.
+
+    Outputs:
+        One png per distinct district_count in the csv, at
+        outputs/cross_run_summaries/figures/district_demographics_<n>districts.png.
+        Each figure is a boxplot with one box per racial group (White, Black,
+        Latino, Asian), showing that group's share of district VAP pooled
+        across every (plan, district) pair for that ensemble.
+
+    Returns:
+        List of paths to the written figures.
+    """
+    if csv_path is None:
+        csv_path = Path("outputs/cross_run_summaries/district_demographics.csv")
+    if not csv_path.is_file():
+        print(f"[summarize_results] {csv_path} not found; run export_district_demographics_csv first.")
+        return []
+
+    df = pd.read_csv(csv_path)
+
+    if output_dir is None:
+        output_dir = Path("outputs/cross_run_summaries/figures")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    written: List[Path] = []
+    for district_count, group_df in df.groupby("district_count"):
+        fig, ax = plt.subplots(figsize=(7, 5))
+
+        data = [group_df[col].to_numpy() * 100 for col, _, _ in DISTRICT_DEMOGRAPHIC_GROUPS]
+        labels = [label for _, label, _ in DISTRICT_DEMOGRAPHIC_GROUPS]
+        colors = [color for _, _, color in DISTRICT_DEMOGRAPHIC_GROUPS]
+
+        bp = ax.boxplot(
+            data,
+            tick_labels=labels,
+            patch_artist=True,
+            widths=0.5,
+            medianprops={"color": "#0b0b0b", "linewidth": 1.5},
+            whiskerprops={"color": "#52514e", "linewidth": 1},
+            capprops={"color": "#52514e", "linewidth": 1},
+            flierprops={
+                "marker": "o", "markersize": 3,
+                "markerfacecolor": "#898781", "markeredgecolor": "none", "alpha": 0.5,
+            },
+        )
+        for patch, color in zip(bp["boxes"], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.55)
+            patch.set_edgecolor(color)
+
+        n_plans = int(group_df["plan_idx"].nunique())
+        n_instances = len(group_df)
+        ax.set_title(
+            f"District-Level Racial Composition — {district_count}-District Ensemble",
+            fontsize=13, fontweight="bold", pad=18,
+        )
+        ax.text(
+            0.5, 1.02,
+            f"{n_plans} sampled plans · {n_instances} district-instances pooled",
+            transform=ax.transAxes, ha="center", va="bottom",
+            fontsize=9, color="#52514e", style="italic",
+        )
+        ax.set_ylabel("Share of District VAP (%)")
+        ax.set_ylim(0, 100)
+        ax.grid(axis="y", linewidth=0.5, color="#e1e0d9", zorder=0)
+        ax.set_axisbelow(True)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        for spine in ("left", "bottom"):
+            ax.spines[spine].set_linewidth(0.5)
+        ax.tick_params(axis="both", labelsize=9)
+
+        fig_path = output_dir / f"district_demographics_{district_count}districts.png"
+        fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        written.append(fig_path)
+        print(f"[summarize_results] Wrote: {fig_path}")
+
+    return written
+
+
+def export_and_plot_one_plan_breakdown(
+    district_count: int,
+    plan_idx: int = 0,
+    csv_path: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
+) -> Tuple[Optional[Path], Optional[Path]]:
+    """
+    Export a per-district racial breakdown for one sampled plan, as both a CSV
+    and a 100%-stacked bar chart (one bar per district in that plan).
+
+    District identity isn't comparable across sampled plans (district_id 0 in
+    one plan is a different piece of the city than district_id 0 in another),
+    so unlike the pooled boxplots in plot_district_demographics, this shows one
+    concrete plan's actual districts side by side, in district_id order.
+
+    Args:
+        district_count: Which ensemble to pull from (e.g. 10 or 50).
+        plan_idx: Which sampled plan to show. Defaults to 0 (the first sampled
+            plan for that ensemble).
+        csv_path: Path to the CSV written by export_district_demographics_csv.
+            Defaults to outputs/cross_run_summaries/district_demographics.csv.
+        output_dir: Where to write the csv/figure. Defaults to
+            outputs/cross_run_summaries (csv) / .../figures (png).
+
+    Outputs:
+        outputs/cross_run_summaries/district_breakdown_<n>districts_plan<p>.csv
+        outputs/cross_run_summaries/figures/district_breakdown_<n>districts_plan<p>.png
+
+    Returns:
+        (csv_path, fig_path), either None if the requested (district_count,
+        plan_idx) isn't present in the source csv.
+    """
+    if csv_path is None:
+        csv_path = Path("outputs/cross_run_summaries/district_demographics.csv")
+    if not csv_path.is_file():
+        print(f"[summarize_results] {csv_path} not found; run export_district_demographics_csv first.")
+        return None, None
+
+    df = pd.read_csv(csv_path)
+    plan_df = df[(df["district_count"] == district_count) & (df["plan_idx"] == plan_idx)]
+    if plan_df.empty:
+        print(f"[summarize_results] No rows for district_count={district_count}, plan_idx={plan_idx}.")
+        return None, None
+
+    plan_df = plan_df.sort_values("district_id")
+
+    if output_dir is None:
+        base_dir = Path("outputs/cross_run_summaries")
+    else:
+        base_dir = Path(output_dir)
+    figs_dir = base_dir / "figures"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    figs_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- CSV: a tidy, sorted, human-readable per-district table -----------------
+    # DISTRICT_DEMOGRAPHIC_GROUPS' col is already the "<group>_share" column;
+    # the raw VAP count column is that name with the "_share" suffix stripped.
+    share_cols = [col for col, _, _ in DISTRICT_DEMOGRAPHIC_GROUPS]
+    raw_cols = [col.removesuffix("_share") for col in share_cols]
+    summary_cols = ["district_id", "total_vap"] + raw_cols + share_cols
+    csv_out_path = base_dir / f"district_breakdown_{district_count}districts_plan{plan_idx}.csv"
+    plan_df[summary_cols].to_csv(csv_out_path, index=False)
+    print(f"[summarize_results] Wrote per-plan district breakdown CSV: {csv_out_path}")
+
+    # --- Figure: one 100%-stacked horizontal bar per district --------------------
+    n_districts = len(plan_df)
+    fig, ax = plt.subplots(figsize=(8, max(3, n_districts * 0.35 + 1)))
+
+    y = range(n_districts)
+    left = [0.0] * n_districts
+    for col, label, color in DISTRICT_DEMOGRAPHIC_GROUPS:
+        widths = (plan_df[col] * 100).to_numpy()
+        ax.barh(
+            list(y), widths, left=left, color=color, alpha=0.85,
+            edgecolor="white", linewidth=0.5, label=label, height=0.7,
+        )
+        left = [l + w for l, w in zip(left, widths)]
+
+    ax.set_yticks(list(y))
+    ax.set_yticklabels([str(d) for d in plan_df["district_id"]])
+    ax.invert_yaxis()  # district 0 at the top
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("Share of District VAP (%)")
+    ax.set_ylabel("District")
+    ax.set_title(
+        f"District Racial Composition — {district_count}-District Ensemble, Plan {plan_idx}",
+        fontsize=13, fontweight="bold", pad=14,
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    for spine in ("left", "bottom"):
+        ax.spines[spine].set_linewidth(0.5)
+    ax.tick_params(axis="both", labelsize=9)
+    ax.legend(
+        loc="upper center", bbox_to_anchor=(0.5, -0.08),
+        ncol=4, frameon=False, fontsize=9,
+    )
+
+    fig_out_path = figs_dir / f"district_breakdown_{district_count}districts_plan{plan_idx}.png"
+    fig.savefig(fig_out_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[summarize_results] Wrote: {fig_out_path}")
+
+    return csv_out_path, fig_out_path

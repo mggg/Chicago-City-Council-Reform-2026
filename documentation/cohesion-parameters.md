@@ -1,6 +1,6 @@
 # Cohesion Paramter Decisions
 
-This document contains information about how we arrived at the chosen cohesion paramters for each our our voting blocs: hispanic, black, and white.
+This document contains information about how we arrived at the chosen cohesion parameters for each our our voting blocs: hispanic, black, and white.
 
 ## Cohesion Matrix
 

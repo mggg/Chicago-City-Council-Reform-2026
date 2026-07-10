@@ -11,7 +11,7 @@ from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
 from pipeline.simulate_elections import simulate_elections
-from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs
+from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs, export_district_demographics_csv, plot_district_demographics, export_and_plot_one_plan_breakdown
 from pipeline.data_generator import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
@@ -93,22 +93,43 @@ def has_valid_profiles(config):
     if not zip_path.is_file():
         print("Profiles do not exist. Running pipeline from profiles stage.")
         return False
-    expected_per_mode = (
-        config["num_subsamples"]
-        * sum(d["num_districts"] for d in config["district_configs"])
-        * config["num_reps"]
-    )
+
     try:
         with zipfile.ZipFile(zip_path) as archive:
+            # A truncated/killed-mid-write archive is usually caught just by
+            # opening it (the central directory lives at the end of the file,
+            # written only on close), but testzip() also verifies every
+            # member's CRC, so a structurally-valid-but-corrupted entry (e.g.
+            # a partial write that still left a readable central directory)
+            # is caught too.
+            first_bad_member = archive.testzip()
+            if first_bad_member is not None:
+                print(
+                    f"Profiles archive has a corrupted entry ({first_bad_member}). "
+                    "Running pipeline from profiles stage."
+                )
+                return False
             members = archive.namelist()
-    except zipfile.BadZipFile:
-        print("Profiles archive is corrupt. Running pipeline from profiles stage.")
+    except (zipfile.BadZipFile, OSError) as e:
+        print(f"Profiles archive is unreadable ({e}). Running pipeline from profiles stage.")
         return False
+
+    # Checked per (mode, district_count) pair, not summed across district_configs,
+    # so a complete district count can't mask an incomplete one when a config has
+    # more than one entry in district_configs.
+    expected_per_district_count = config["num_subsamples"] * config["num_reps"]
     for mode in get_voter_models(config):
-        count = sum(1 for n in members if n.startswith(f"{mode}/") and n.endswith(".csv"))
-        if count != expected_per_mode:
-            print(f"Missing valid settings for {mode} mode. Running pipeline from profiles stage.")
-            return False
+        for d in config["district_configs"]:
+            n = d["num_districts"]
+            prefix = f"{mode}/{n}/"
+            count = sum(1 for m in members if m.startswith(prefix) and m.endswith(".csv"))
+            if count != expected_per_district_count:
+                print(
+                    f"Missing valid profiles for mode={mode}, district_count={n} "
+                    f"(found {count}, expected {expected_per_district_count}). "
+                    "Running pipeline from profiles stage."
+                )
+                return False
     return True
 
 def has_valid_election_results(config):
@@ -231,8 +252,8 @@ def run_pipeline(config):
 
 
 def main():
-    configurations = load_all_config_files(config_dir="configs")
-
+    # configurations = load_all_config_files(config_dir="configs")
+    configurations = [load_config("configs/basic.json")]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
     generate_data()
@@ -242,6 +263,10 @@ def main():
         run_pipeline(config)
 
     plot_combined_bubbles_all_runs(config)
+    export_district_demographics_csv(config)
+    plot_district_demographics()
+    for district_num in sorted(p.name for p in Path("outputs/districts/chain_out").iterdir() if p.name.isdigit()):
+        export_and_plot_one_plan_breakdown(int(district_num), plan_idx=0)
 
 if __name__ == "__main__":
     

@@ -106,6 +106,15 @@ def generate_profiles(config):
     # Opened once for the whole run: workers only compute (filename, csv_text)
     # pairs in parallel, and every actual write to the shared archive happens
     # here, sequentially, in the main process.
+    #
+    # return_as="generator_unordered" makes Parallel yield each worker's result
+    # as soon as it's ready, instead of collecting the whole batch (up to
+    # num_districts x num_subsamples settings files, e.g. 2,500 for a 50x1
+    # config) into memory before any of it is written. Peak memory is bounded
+    # by whatever's in flight across the worker pool, not the full batch size,
+    # so a handful of unusually large profiles (e.g. a district whose slates
+    # are heavily concentrated onto one demographic group) no longer forces
+    # the entire batch to be held in memory at once.
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         # repeat for each replicate
         for duplicate_indx in range(num_reps):
@@ -121,13 +130,13 @@ def generate_profiles(config):
                         description=f"[rep {duplicate_indx + 1:03d}/{num_reps}] Generating VK profiles for {district_num:02d} districts and voter model {mode}",
                         total=len(all_settings_files),
                     ):
-                        results = Parallel(n_jobs=-1)(
+                        results = Parallel(n_jobs=-1, return_as="generator_unordered")(
                             delayed(process_settings_file)(settings_file, mode, duplicate_indx)
                             for settings_file in all_settings_files
                         )
 
-                    for filename, csv_text in results:
-                        archive.writestr(f"{mode}/{district_num}/{filename}", csv_text)
+                        for filename, csv_text in results:
+                            archive.writestr(f"{mode}/{district_num}/{filename}", csv_text)
             rep_elapsed = time.perf_counter() - rep_start
             print(f"[rep {duplicate_indx + 1}/{num_reps}] Done in {rep_elapsed:.1f}s")
 

@@ -101,36 +101,58 @@ def _validate_bloc_config(config, bloc_definitions):
                 )
 
 
-def _apportion_counts(proportions, total):
+def _exaggerate_by_squares(proportions):
     """
-    Apportion `total` whole units across the keys of `proportions` in proportion
-    to their shares, using the largest-remainder (Hamilton) method.
+    Exaggerate a share distribution by the "proportional to the square" method:
+    square each share, then renormalize so the squares sum to 1.
 
-    A key whose share is small enough relative to the others may be apportioned
-    zero units — there is no guaranteed floor. Ties in the remainder are broken
-    by dict order, which is insertion order and therefore deterministic given a
-    fixed config.
+    Squaring inflates larger shares and shrinks smaller ones relative to each
+    other (e.g. [0.5, 0.3, 0.15, 0.05] -> squares [0.25, 0.09, 0.0225, 0.0025]
+    -> renormalized [0.685, 0.246, 0.062, 0.007]), so the resulting interval is
+    more concentrated on the dominant slate(s) than the underlying VAP shares.
 
     Args:
         proportions: Dict mapping key -> share of the total (sums to ~1).
-        total: Total whole units to distribute; must be >= 0.
 
     Returns:
-        Dict mapping each key to its apportioned integer count (some may be 0),
-        summing to total.
+        Dict mapping each key to its squared-and-renormalized share (sums to 1).
     """
-    if total < 0:
-        raise ValueError(f"total_candidates ({total}) must be non-negative.")
+    squared = {k: v ** 2 for k, v in proportions.items()}
+    total = sum(squared.values())
+    if total <= 0:
+        return {k: 1.0 / len(proportions) for k in proportions}
+    return {k: v / total for k, v in squared.items()}
 
-    keys = list(proportions)
-    quotas = {k: proportions[k] * total for k in keys}
-    counts = {k: int(quotas[k]) for k in keys}
 
-    leftover = total - sum(counts.values())
-    remainder_order = sorted(keys, key=lambda k: quotas[k] - counts[k], reverse=True)
-    for k in remainder_order[:leftover]:
-        counts[k] += 1
+def _sample_slate_counts(proportions, total_candidates):
+    """
+    Fill total_candidates candidate slots by sampling with replacement from
+    proportions, treated as a categorical distribution over slates.
 
+    Unlike a deterministic apportionment, this is stochastic: a slate's count
+    is a random draw weighted by its share, not its share times total_candidates
+    rounded to the nearest integer, so counts vary run to run even for the same
+    proportions.
+
+    Args:
+        proportions: Dict mapping slate -> probability (sums to ~1).
+        total_candidates: Number of candidate slots to fill; must be >= 0.
+
+    Returns:
+        Dict mapping each slate to how many slots it was drawn for (some may
+        be 0), summing to total_candidates.
+    """
+    if total_candidates < 0:
+        raise ValueError(f"total_candidates ({total_candidates}) must be non-negative.")
+
+    slates = list(proportions)
+    counts = {s: 0 for s in slates}
+    if total_candidates == 0:
+        return counts
+
+    weights = [proportions[s] for s in slates]
+    for s in random.choices(slates, weights=weights, k=total_candidates):
+        counts[s] += 1
     return counts
 
 
@@ -175,7 +197,14 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_proba
     Build a district-specific slate_to_candidates mapping sized proportionally
     to each slate's share of modeled VAP in this district.
 
-    Slates apportioned zero candidates (whether from the base apportionment or
+    Each slate's linear VAP share is exaggerated by squaring-and-renormalizing
+    (see _exaggerate_by_squares), then total_candidates candidate slots are
+    filled by sampling from that exaggerated distribution (see
+    _sample_slate_counts) rather than a deterministic apportionment — so the
+    resulting slate sizes both skew toward the district's dominant slate(s)
+    and vary randomly run to run, on top of the noise perturbation below.
+
+    Slates apportioned zero candidates (whether from the sampling itself or
     from noise knocking a count to 0) are omitted entirely — VoteKit's
     BlocSlateConfig rejects a slate with an empty candidate list, so a slate
     with negligible population share simply doesn't run in that district.
@@ -183,10 +212,10 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_proba
     Args:
         row: Row from the district population dataframe.
         slate_columns: Dict mapping each slate to its VAP column name.
-        total_candidates: Total number of candidates to distribute across slates
-            before noise is applied.
+        total_candidates: Total number of candidate slots to fill before noise
+            is applied.
         noise_probability: Float in [0, 0.5] giving the independent per-slate
-            probability of adding or removing one candidate after apportionment.
+            probability of adding or removing one candidate after sampling.
             Defaults to 0 (no noise).
 
     Returns:
@@ -201,7 +230,8 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_proba
     else:
         proportions = {s: 1.0 / len(slates) for s in slates}
 
-    counts = _apportion_counts(proportions, total_candidates)
+    exaggerated = _exaggerate_by_squares(proportions)
+    counts = _sample_slate_counts(exaggerated, total_candidates)
     counts = _apply_candidate_noise(counts, noise_probability)
     return {
         s: [f"{s}{i}" for i in range(1, counts[s] + 1)]

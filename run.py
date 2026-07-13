@@ -252,8 +252,8 @@ def run_pipeline(config):
 
 
 def main():
-    # configurations = load_all_config_files(config_dir="configs")
-    configurations = [load_config("configs/basic.json")]
+    configurations = load_all_config_files(config_dir="configs")
+
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
     generate_data()

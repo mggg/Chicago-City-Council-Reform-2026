@@ -141,3 +141,7 @@ completes.
 
 ![Asian Bloc Separate by-slate panel](../figures/Asian%20Bloc%20Separate%20-%20Basic/Asian%20Bloc%20Separate%20-%20Basic_10x50_FASTSTV_byslate.png)
 
+
+### Questions and Thoughts
+
+Right now, one of the biggest surprises being observed is that 50 X 1 PSMD and 50 X 1 IRV see better representation for Asian voters - particularly when they're impulsive. 

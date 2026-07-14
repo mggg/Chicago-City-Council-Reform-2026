@@ -1,5 +1,5 @@
 {
-  "run_name": "Basic - 50x1 Plurality",
+  "run_name": "Basic - 50 X 1 Plurality",
 
   "geodata_path": "./data/chicago_precincts_vap_cvap.gpkg",
 
@@ -16,6 +16,8 @@
   "num_subsamples": 50,
 
   "total_seats": 50,
+
+  "total_candidates": 12,
 
   "epsilon": 0.05,
 
@@ -47,8 +49,6 @@
   },
 
   "focal_group": "A",
-
-  "candidate_noise_probability": 0.1,
 
   "cohesion_parameters": {
     "W-A": { "W": 0.61, "B": 0.13, "H": 0.04, "A": 0.22 },

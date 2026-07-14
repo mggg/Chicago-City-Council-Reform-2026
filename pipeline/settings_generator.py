@@ -14,6 +14,7 @@ import geopandas as gpd
 from pathlib import Path
 import jsonlines as jl
 from tqdm import tqdm
+from pipeline.utils.helpers import ensemble_signature, get_chain_out_dir
 
 # Default mapping from demographic-group label -> VAP column in the geodata
 # (matches the schema written by data_generator). Override per-run with a
@@ -156,43 +157,7 @@ def _sample_slate_counts(proportions, total_candidates):
     return counts
 
 
-def _apply_candidate_noise(counts, noise_probability):
-    """
-    Independently perturb each slate's candidate count by at most one candidate.
-
-    For each slate: with probability `noise_probability`, remove one candidate;
-    with probability `noise_probability`, add one candidate; otherwise (probability
-    1 - 2 * noise_probability) leave the count unchanged. Counts are clamped at 0.
-
-    Args:
-        counts: Dict mapping slate -> apportioned candidate count.
-        noise_probability: Float in [0, 0.5]. 0 disables noise entirely.
-
-    Returns:
-        Dict mapping each slate to its (possibly perturbed) count.
-    """
-    if noise_probability == 0:
-        return dict(counts)
-
-    if not (0 <= noise_probability <= 0.5):
-        raise ValueError(
-            f"candidate_noise_probability ({noise_probability}) must be between 0 and 0.5."
-        )
-
-    perturbed = {}
-    for slate, count in counts.items():
-        roll = random.random()
-        if roll < noise_probability:
-            delta = -1
-        elif roll < 2 * noise_probability:
-            delta = 1
-        else:
-            delta = 0
-        perturbed[slate] = max(0, count + delta)
-    return perturbed
-
-
-def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_probability=0):
+def _build_slate_to_candidates(row, slate_columns, total_candidates):
     """
     Build a district-specific slate_to_candidates mapping sized proportionally
     to each slate's share of modeled VAP in this district.
@@ -202,25 +167,20 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_proba
     filled by sampling from that exaggerated distribution (see
     _sample_slate_counts) rather than a deterministic apportionment — so the
     resulting slate sizes both skew toward the district's dominant slate(s)
-    and vary randomly run to run, on top of the noise perturbation below.
+    and vary randomly run to run.
 
-    Slates apportioned zero candidates (whether from the sampling itself or
-    from noise knocking a count to 0) are omitted entirely — VoteKit's
-    BlocSlateConfig rejects a slate with an empty candidate list, so a slate
-    with negligible population share simply doesn't run in that district.
+    Slates apportioned zero candidates by the sampling are omitted entirely —
+    VoteKit's BlocSlateConfig rejects a slate with an empty candidate list, so a
+    slate with negligible population share simply doesn't run in that district.
 
     Args:
         row: Row from the district population dataframe.
         slate_columns: Dict mapping each slate to its VAP column name.
-        total_candidates: Total number of candidate slots to fill before noise
-            is applied.
-        noise_probability: Float in [0, 0.5] giving the independent per-slate
-            probability of adding or removing one candidate after sampling.
-            Defaults to 0 (no noise).
+        total_candidates: Total number of candidate slots to fill.
 
     Returns:
-        Dict mapping each slate with a nonzero (post-noise) count to a list of
-        candidate ids, e.g. {"W": ["W1", "W2"]}.
+        Dict mapping each slate with a nonzero count to a list of candidate ids,
+        e.g. {"W": ["W1", "W2"]}.
     """
     slates = list(slate_columns)
     weighted = {s: float(row[slate_columns[s]]) for s in slates}
@@ -232,7 +192,6 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates, noise_proba
 
     exaggerated = _exaggerate_by_squares(proportions)
     counts = _sample_slate_counts(exaggerated, total_candidates)
-    counts = _apply_candidate_noise(counts, noise_probability)
     return {
         s: [f"{s}{i}" for i in range(1, counts[s] + 1)]
         for s in slates
@@ -351,14 +310,12 @@ def generate_settings(config):
         bloc_proportions in each file are turnout-adjusted focal group proportions.
         slate_to_candidates in each file is resized per-district: total_candidates (default:
         the candidate count from config's slate_to_candidates) is apportioned across slates
-        in proportion to each slate's share of modeled VAP in that district, then perturbed
-        by candidate_noise_probability (default 0). A slate whose count reaches zero (from
-        apportionment or noise) is dropped from slate_to_candidates, and its column is
+        in proportion to each slate's share of modeled VAP in that district. A slate
+        sampled zero candidates is dropped from slate_to_candidates, and its column is
         dropped (with cohesion_parameters renormalized) from that district's
         cohesion_parameters and alphas.
     """
     random.seed(config["seed"])
-    noise_probability = config.get("candidate_noise_probability", 0)
 
     bloc_definitions = get_bloc_definitions(config)
     _validate_bloc_config(config, bloc_definitions)
@@ -395,7 +352,7 @@ def generate_settings(config):
         settings_folder = Path(f'outputs/{run_name}/settings/{district_num}')
         settings_folder.mkdir(exist_ok=True, parents=True)
 
-        path_to_districting = Path(f'outputs/districts/chain_out/{district_num}/{district_num}_districts.jsonl.gz')
+        path_to_districting = get_chain_out_dir(ensemble_signature(config), district_num) / f"{district_num}_districts.jsonl.gz"
         
         with gzip.open(path_to_districting, mode="rt", encoding="utf-8") as gz_file:
             file = jl.Reader(gz_file)
@@ -415,7 +372,7 @@ def generate_settings(config):
                     district = row.name
                     district_settings = _build_district_settings(row, config, group_columns, bloc_definitions)
                     slate_to_candidates = _build_slate_to_candidates(
-                        row, slate_columns, total_candidates, noise_probability
+                        row, slate_columns, total_candidates
                     )
                     active_slates = list(slate_to_candidates)
                     cohesion_parameters = _filter_cohesion_to_slates(config["cohesion_parameters"], active_slates)
@@ -430,3 +387,8 @@ def generate_settings(config):
                         "w",
                     ) as out_file:
                         json.dump(settings, out_file, indent=2)
+
+if __name__ == '__main__':
+    with open("configs/10x5-stv.json", "r") as f:
+        config = json.load(f)
+    generate_settings(config)

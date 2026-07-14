@@ -18,6 +18,10 @@ from votekit import RankProfile, ScoreProfile, elections
 from typing import List, Iterable, Any, get_args
 from dataclasses import dataclass
 from pipeline.utils.helpers import get_voter_models
+from pipeline.utils.preference_matrix import (
+    preference_matrix_arcname,
+    preference_matrix_json,
+)
 
 
 
@@ -84,15 +88,51 @@ def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
             winners.append(str(next(iter(s))))
     return winners
 
+def _load_profile_from_zip(zip_path: str | Path, member_name: str, profile_class):
+    """
+    Extract a single profile csv from the run's profiles.zip and load it into the
+    given profile class.
+
+    Neither RankProfile nor ScoreProfile can read a zip member (or any in-memory
+    stream) directly, so we extract to a unique temp file and delete it after
+    loading. Using NamedTemporaryFile avoids collisions between parallel workers
+    processing different profiles concurrently; each worker opens its own ZipFile
+    handle onto the same archive on disk, which is safe for concurrent reads.
+
+    Args:
+        zip_path: Path to the run's profiles.zip archive.
+        member_name: Name of the profile csv entry within the archive.
+        profile_class: RankProfile or ScoreProfile.
+
+    Returns:
+        The loaded profile instance.
+    """
+    with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp:
+        temp_path = Path(tmp.name)
+        with zipfile.ZipFile(zip_path) as archive:
+            with archive.open(member_name) as infile:
+                tmp.write(infile.read())
+
+    try:
+        return profile_class.from_csv(temp_path)
+    finally:
+        os.remove(temp_path)
+
+
 def _process_profile(
     zip_path: str | Path,
     member_name: str,
     election_plan: List[tuple],
     voting_configs: dict,
-) -> dict:
+    include_preference_matrix: bool = True,
+) -> tuple:
     """
     Load a voter profile csv from the run's profiles.zip and run each configured
     election to determine winners.
+
+    Runs in a joblib worker, so it never writes to the shared preference-matrix
+    archive itself; instead it returns the matrix payload for the caller to write
+    sequentially in the main process (mirroring how profiles are bundled).
 
     Args:
         zip_path: Path to the run's profiles.zip archive.
@@ -100,9 +140,14 @@ def _process_profile(
         election_plan: Precomputed (rule, election_class, profile_class) tuples
             from _build_election_plan; avoids per-file class lookup/introspection.
         voting_configs: Election and voting settings specified in configuration files.
+        include_preference_matrix: When True, also compute this profile's candidate
+            distance ("preference") matrix and return it as a payload.
 
     Returns:
-        {[type]: [winner_ids]} e.g. { "stv": ["A2", "B1", "B3"] }
+        (results, matrix_payload) where:
+          - results is {[type]: [winner_ids]} e.g. { "stv": ["A2", "B1", "B3"] }
+          - matrix_payload is (arcname, json_str) for the preference-matrix zip
+            entry, or None when include_preference_matrix is False.
 
     TO-DO: Figure out how to use RankProfile OR ScoreProfile for BlockPlurality if desired.
         Current default is RankProfile.
@@ -117,26 +162,7 @@ def _process_profile(
     for rule, election_class, profile_class in election_plan:
         profile = profile_cache.get(profile_class)
         if profile is None:
-
-            # Neither RankProfile nor ScoreProfile can read a zip member (or any
-            # in-memory stream) directly, so extract to a unique temp file and
-            # delete it after loading. Using NamedTemporaryFile avoids collisions
-            # between parallel workers processing different profiles concurrently;
-            # each worker opens its own ZipFile handle onto the same archive on
-            # disk, which is safe for concurrent reads.
-            with tempfile.NamedTemporaryFile(
-                mode='wb', suffix='.csv', delete=False
-            ) as tmp:
-                temp_path = Path(tmp.name)
-                with zipfile.ZipFile(zip_path) as archive:
-                    with archive.open(member_name) as infile:
-                        tmp.write(infile.read())
-
-            try:
-                profile = profile_class.from_csv(temp_path)
-            finally:
-                os.remove(temp_path)
-
+            profile = _load_profile_from_zip(zip_path, member_name, profile_class)
             profile_cache[profile_class] = profile
 
         # The parameters used in the class constructors are specified in the
@@ -146,7 +172,20 @@ def _process_profile(
         elected = election_class(profile, **voting_configs[rule]).get_elected()
         results[rule] = _candidate_list_from_elected(elected)
 
-    return results
+    # Compute the preference matrix for the full ranked profile. Reuse the
+    # RankProfile already loaded for a ranked rule when present; otherwise load
+    # one just for the matrix (profiles are ranked-ballot csvs).
+    matrix_payload = None
+    if include_preference_matrix:
+        rank_profile = profile_cache.get(RankProfile)
+        if rank_profile is None:
+            rank_profile = _load_profile_from_zip(zip_path, member_name, RankProfile)
+        matrix_payload = (
+            preference_matrix_arcname(member_name),
+            preference_matrix_json(rank_profile),
+        )
+
+    return results, matrix_payload
 
 def _parse_district_configs(raw: Any) -> List[DistrictConfig]:
     """
@@ -198,6 +237,11 @@ def simulate_elections(config) -> None:
           - multi-seat: {"stv": [...]}
           - single-seat: {"plurality": [...], "irv": [...]}
 
+        Also writes one compressed archive of per-profile candidate distance
+        ("preference") matrices at outputs/<run_name>/preference_matrices.zip,
+        with one <mode>/<district_count>/<profile_stem>.json entry per profile
+        (same layout as profiles.zip).
+
     Returns:
         None.
     """
@@ -218,54 +262,76 @@ def simulate_elections(config) -> None:
     out_root = Path("outputs") / f'{run_name}' / "election_results"
     out_root.mkdir(parents=True, exist_ok=True)
 
+    # Single compressed archive for the per-profile candidate distance
+    # ("preference") matrices, mirroring how profiles.zip bundles the profile
+    # csvs. Workers compute each matrix in parallel and return its (arcname, json)
+    # payload; every write into the shared archive happens here, sequentially in
+    # the main process. Entries are organized by mode and district count.
+    preference_matrix_zip_path = Path("outputs") / f'{run_name}' / "preference_matrices.zip"
+    preference_matrix_zip_path.parent.mkdir(parents=True, exist_ok=True)
+
     zip_path = Path(f"outputs/{run_name}/profiles.zip")
     with zipfile.ZipFile(zip_path) as archive:
         all_members = archive.namelist()
 
-    # run elections for each voter model
-    for mode in modes:
-        output_dir = out_root / mode
-        output_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(
+        preference_matrix_zip_path, "w", compression=zipfile.ZIP_DEFLATED
+    ) as preference_matrix_archive:
+        # run elections for each voter model
+        for mode in modes:
+            output_dir = out_root / mode
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        for dc in district_configs:
-            prefix = f"{mode}/{dc.num_districts}/"
-            all_profile_files = [n for n in all_members if n.startswith(prefix) and n.endswith(".csv")]
+            for dc in district_configs:
+                prefix = f"{mode}/{dc.num_districts}/"
+                all_profile_files = [n for n in all_members if n.startswith(prefix) and n.endswith(".csv")]
 
-            desc = f"Running elections for {dc.num_districts} districts, {dc.winners} winner(s), mode={mode}"
-            if joblib_progress is not None:
-                ctx = joblib_progress(description=desc, total=len(all_profile_files))
-            else:
-                ctx = None
+                desc = f"Running elections for {dc.num_districts} districts, {dc.winners} winner(s), mode={mode}"
+                if joblib_progress is not None:
+                    ctx = joblib_progress(description=desc, total=len(all_profile_files))
+                else:
+                    ctx = None
 
-            if ctx is not None:
-                with ctx:
-                    results_list = Parallel(n_jobs=n_jobs)(
+                if ctx is not None:
+                    with ctx:
+                        processed = Parallel(n_jobs=n_jobs)(
+                            delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                        )
+
+                else:
+                    print(f"[simulate_elections] {desc} (no joblib_progress installed)")
+                    processed = Parallel(n_jobs=n_jobs)(
                         delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
                     )
 
-            else:
-                print(f"[simulate_elections] {desc} (no joblib_progress installed)")
-                results_list = Parallel(n_jobs=n_jobs)(
-                    delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                # Split the election results (kept in profile order to stay aligned
+                # with all_profile_files) from the preference-matrix payloads, and
+                # write each matrix into the shared archive from this main process.
+                results_list = []
+                for election_result, matrix_payload in processed:
+                    results_list.append(election_result)
+                    if matrix_payload is not None:
+                        arcname, matrix_json = matrix_payload
+                        preference_matrix_archive.writestr(arcname, matrix_json)
+
+                # write all winners for this district/mode combo to one json file
+                out_path = output_dir / (
+                    f"{run_name}_{dc.num_districts}_districts_{dc.winners}_winners_for_voter_mode_{mode}.json"
                 )
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "run_name": run_name,
+                            "voter_mode": mode,
+                            "district_num": dc.num_districts,
+                            "winners_per_district": dc.winners,
+                            "profile_files": all_profile_files,
+                            "election_results": results_list,
+                        },
+                        f,
+                        indent=2,
+                    )
 
+                print(f"[simulate_elections] Wrote: {out_path}")
 
-            # write all winners for this district/mode combo to one json file
-            out_path = output_dir / (
-                f"{run_name}_{dc.num_districts}_districts_{dc.winners}_winners_for_voter_mode_{mode}.json"
-            )
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    {
-                        "run_name": run_name,
-                        "voter_mode": mode,
-                        "district_num": dc.num_districts,
-                        "winners_per_district": dc.winners,
-                        "profile_files": all_profile_files,
-                        "election_results": results_list,
-                    },
-                    f,
-                    indent=2,
-                )
-
-            print(f"[simulate_elections] Wrote: {out_path}")
+    print(f"[simulate_elections] Wrote preference matrices: {preference_matrix_zip_path}")

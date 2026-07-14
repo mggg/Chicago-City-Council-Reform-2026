@@ -29,6 +29,8 @@ from pipeline.utils.helpers import (
     load_json,
     find_settings_file,
     get_voter_models,
+    get_chain_out_dir,
+    ensemble_signature,
 )
 from pipeline.settings_generator import (
     get_bloc_definitions,
@@ -1213,6 +1215,15 @@ def summarize_results(config) -> Path:
     return summary_dir
 
 
+def _district_demographics_csv_path(run_name: str) -> Path:
+    """
+    Namespaced path for a run's district-demographics CSV. The demographics
+    reflect the run's particular ensemble, so each run gets its own file under
+    the shared cross_run_summaries directory rather than overwriting a common one.
+    """
+    return Path("outputs/cross_run_summaries") / f"{run_name}_district_demographics.csv"
+
+
 def export_district_demographics_csv(
     config,
     output_path: Optional[Path] = None,
@@ -1221,18 +1232,19 @@ def export_district_demographics_csv(
     Export per-district racial VAP demographics for every sampled plan in every
     completed district-count ensemble, as a flat CSV.
 
-    Reads the district assignment chain(s) already generated under
-    outputs/districts/chain_out/<district_count>/ (one such ensemble per
-    distinct district count found there, e.g. 10 and 50). These are raw VAP
-    facts straight from the geodata, independent of any particular run's
-    turnout/cohesion/slate settings, so one export covers every run.
+    Reads the district assignment chain(s) already generated for this config's
+    ensemble under outputs/districts/chain_out/<signature>/<district_count>/ (one
+    such ensemble per distinct district count found there, e.g. 10 and 50). These
+    are raw VAP facts straight from the geodata, so the demographics reflect this
+    config's particular ensemble (a neutral chain and a bloc-optimized short-burst
+    run for the same district count have different signatures and differ).
 
     Args:
-        config: Any parsed config dict; only its geodata_path, chain_length,
-            num_subsamples, and (optionally) group_vap_columns are used, since
-            those are shared across every run.
+        config: Parsed config dict; its run_name selects the ensemble, and its
+            geodata_path, chain_length, num_subsamples, and (optionally)
+            group_vap_columns drive the export.
         output_path: Where to write the CSV. Defaults to
-            outputs/cross_run_summaries/district_demographics.csv.
+            outputs/cross_run_summaries/<run_name>_district_demographics.csv.
 
     Outputs:
         A CSV with one row per (district_count, plan_idx, district_id), with
@@ -1242,9 +1254,9 @@ def export_district_demographics_csv(
 
     Returns:
         Path to the written CSV, or None if no district-count ensembles were
-        found under outputs/districts/chain_out/.
+        found under outputs/districts/chain_out/<signature>/.
     """
-    chain_out_root = Path("outputs/districts/chain_out")
+    chain_out_root = get_chain_out_dir(ensemble_signature(config))
     if not chain_out_root.is_dir():
         print("[summarize_results] No district ensembles found; skipping demographics export.")
         return None
@@ -1302,7 +1314,7 @@ def export_district_demographics_csv(
         return None
 
     if output_path is None:
-        output_path = Path("outputs/cross_run_summaries/district_demographics.csv")
+        output_path = _district_demographics_csv_path(config["run_name"])
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     pd.DataFrame(rows).to_csv(output_path, index=False)
@@ -1324,6 +1336,7 @@ DISTRICT_DEMOGRAPHIC_GROUPS = [
 
 
 def plot_district_demographics(
+    run_name: str,
     csv_path: Optional[Path] = None,
     output_dir: Optional[Path] = None,
 ) -> List[Path]:
@@ -1333,14 +1346,17 @@ def plot_district_demographics(
     district-count ensemble.
 
     Args:
+        run_name: The run whose demographics to plot; selects the namespaced CSV
+            and prefixes the figure filenames so runs don't overwrite each other.
         csv_path: Path to the CSV written by export_district_demographics_csv.
-            Defaults to outputs/cross_run_summaries/district_demographics.csv.
+            Defaults to
+            outputs/cross_run_summaries/<run_name>_district_demographics.csv.
         output_dir: Where to write the figures. Defaults to
             outputs/cross_run_summaries/figures.
 
     Outputs:
         One png per distinct district_count in the csv, at
-        outputs/cross_run_summaries/figures/district_demographics_<n>districts.png.
+        outputs/cross_run_summaries/figures/<run_name>_district_demographics_<n>districts.png.
         Each figure is a boxplot with one box per racial group (White, Black,
         Latino, Asian), showing that group's share of district VAP pooled
         across every (plan, district) pair for that ensemble.
@@ -1349,7 +1365,7 @@ def plot_district_demographics(
         List of paths to the written figures.
     """
     if csv_path is None:
-        csv_path = Path("outputs/cross_run_summaries/district_demographics.csv")
+        csv_path = _district_demographics_csv_path(run_name)
     if not csv_path.is_file():
         print(f"[summarize_results] {csv_path} not found; run export_district_demographics_csv first.")
         return []
@@ -1408,7 +1424,7 @@ def plot_district_demographics(
             ax.spines[spine].set_linewidth(0.5)
         ax.tick_params(axis="both", labelsize=9)
 
-        fig_path = output_dir / f"district_demographics_{district_count}districts.png"
+        fig_path = output_dir / f"{run_name}_district_demographics_{district_count}districts.png"
         fig.savefig(fig_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
         written.append(fig_path)
@@ -1420,6 +1436,8 @@ def plot_district_demographics(
 def export_and_plot_one_plan_breakdown(
     district_count: int,
     plan_idx: int = 0,
+    *,
+    run_name: str,
     csv_path: Optional[Path] = None,
     output_dir: Optional[Path] = None,
 ) -> Tuple[Optional[Path], Optional[Path]]:
@@ -1436,21 +1454,24 @@ def export_and_plot_one_plan_breakdown(
         district_count: Which ensemble to pull from (e.g. 10 or 50).
         plan_idx: Which sampled plan to show. Defaults to 0 (the first sampled
             plan for that ensemble).
+        run_name: The run whose ensemble to read; selects the namespaced source
+            CSV and prefixes the breakdown csv/figure filenames.
         csv_path: Path to the CSV written by export_district_demographics_csv.
-            Defaults to outputs/cross_run_summaries/district_demographics.csv.
+            Defaults to
+            outputs/cross_run_summaries/<run_name>_district_demographics.csv.
         output_dir: Where to write the csv/figure. Defaults to
             outputs/cross_run_summaries (csv) / .../figures (png).
 
     Outputs:
-        outputs/cross_run_summaries/district_breakdown_<n>districts_plan<p>.csv
-        outputs/cross_run_summaries/figures/district_breakdown_<n>districts_plan<p>.png
+        outputs/cross_run_summaries/<run_name>_district_breakdown_<n>districts_plan<p>.csv
+        outputs/cross_run_summaries/figures/<run_name>_district_breakdown_<n>districts_plan<p>.png
 
     Returns:
         (csv_path, fig_path), either None if the requested (district_count,
         plan_idx) isn't present in the source csv.
     """
     if csv_path is None:
-        csv_path = Path("outputs/cross_run_summaries/district_demographics.csv")
+        csv_path = _district_demographics_csv_path(run_name)
     if not csv_path.is_file():
         print(f"[summarize_results] {csv_path} not found; run export_district_demographics_csv first.")
         return None, None
@@ -1477,7 +1498,7 @@ def export_and_plot_one_plan_breakdown(
     share_cols = [col for col, _, _ in DISTRICT_DEMOGRAPHIC_GROUPS]
     raw_cols = [col.removesuffix("_share") for col in share_cols]
     summary_cols = ["district_id", "total_vap"] + raw_cols + share_cols
-    csv_out_path = base_dir / f"district_breakdown_{district_count}districts_plan{plan_idx}.csv"
+    csv_out_path = base_dir / f"{run_name}_district_breakdown_{district_count}districts_plan{plan_idx}.csv"
     plan_df[summary_cols].to_csv(csv_out_path, index=False)
     print(f"[summarize_results] Wrote per-plan district breakdown CSV: {csv_out_path}")
 
@@ -1515,7 +1536,7 @@ def export_and_plot_one_plan_breakdown(
         ncol=4, frameon=False, fontsize=9,
     )
 
-    fig_out_path = figs_dir / f"district_breakdown_{district_count}districts_plan{plan_idx}.png"
+    fig_out_path = figs_dir / f"{run_name}_district_breakdown_{district_count}districts_plan{plan_idx}.png"
     fig.savefig(fig_out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"[summarize_results] Wrote: {fig_out_path}")

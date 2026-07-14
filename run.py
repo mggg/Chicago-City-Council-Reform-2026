@@ -15,7 +15,7 @@ from pipeline.summarize_results import summarize_results, plot_combined_bubbles_
 from pipeline.data_generator import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
-from pipeline.utils.helpers import get_voter_models
+from pipeline.utils.helpers import get_voter_models, get_chain_out_dir, ensemble_signature
 
 def load_all_config_files(config_dir="configs"):
     all_config_files = [load_config(path) for path in glob(f"{config_dir}/*.json")]
@@ -29,10 +29,9 @@ def load_config(config_path: str) -> dict:
 
 
 def has_valid_district_outputs(config) -> bool:
-    run = config["run_name"]
     n = config["chain_length"]
     n_district = config["district_configs"][0]["num_districts"]
-    base = Path("outputs") / "districts" / "chain_out" / f"{n_district}"
+    base = get_chain_out_dir(ensemble_signature(config), n_district)
 
 
     if not base.is_dir():
@@ -56,6 +55,12 @@ def has_valid_district_outputs(config) -> bool:
     ]
 
     if any(config[k] != config_md[k] for k in keys):
+        return False
+
+    # The "optimized" ensemble bucket isn't bloc-specific, so also guard the bloc
+    # (and neutral vs optimized) here: a chain optimized for a different bloc must
+    # not be reused. .get keeps neutral configs (no such key) comparing equal.
+    if config.get("optimize_for_bloc") != config_md.get("optimize_for_bloc"):
         return False
     
     for d in config["district_configs"]:
@@ -252,8 +257,8 @@ def run_pipeline(config):
 
 
 def main():
-    configurations = load_all_config_files(config_dir="configs")
-
+    # configurations = load_all_config_files(config_dir="configs")
+    configurations = [load_config("testing/configs/basic.json")]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
     generate_data()
@@ -264,9 +269,9 @@ def main():
 
     plot_combined_bubbles_all_runs(config)
     export_district_demographics_csv(config)
-    plot_district_demographics()
-    for district_num in sorted(p.name for p in Path("outputs/districts/chain_out").iterdir() if p.name.isdigit()):
-        export_and_plot_one_plan_breakdown(int(district_num), plan_idx=0)
+    plot_district_demographics(config["run_name"])
+    for district_num in sorted(p.name for p in get_chain_out_dir(ensemble_signature(config)).iterdir() if p.name.isdigit()):
+        export_and_plot_one_plan_breakdown(int(district_num), plan_idx=0, run_name=config["run_name"])
 
 if __name__ == "__main__":
     

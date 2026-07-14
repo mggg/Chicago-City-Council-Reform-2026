@@ -20,9 +20,22 @@ from gerrychain.accept import always_accept
 from gerrychain.proposals import recom
 from gerrychain.constraints import within_percent_of_ideal_population
 from gerrychain.tree import bipartition_tree
+from gerrychain.optimization import Gingleator
+
+from pipeline.utils.helpers import ensemble_signature, get_chain_out_dir, get_district_images_dir, save_district_plan_png
 
 # required for gerrychain reproducibility
 os.environ.setdefault("PYTHONHASHSEED", "0")
+
+# Maps a config's "optimize_for_bloc" value to the per-district VAP tally updater
+# alias set up below (and paired with the "VAP20" total to form each district's
+# minority share for the Gingleator).
+BLOC_TO_VAP_ALIAS = {
+    "W": "WVAP20",
+    "B": "BVAP20",
+    "H": "HVAP20",
+    "A": "AVAP20",
+}
 
 def generate_districts(config):
     """
@@ -79,8 +92,9 @@ def generate_districts(config):
     graph_path = output_dir / f"{run_name}_graph.json"
     graph.to_json(str(graph_path))
 
-    # Step 3 — Output directory
-    output_dir = Path(config["gerrychain_output_dir"] + f"/{n_district}")
+    # Step 3 — Output directory (keyed by ensemble signature so equivalent runs
+    # share a chain and different ensembles stay separate)
+    output_dir = get_chain_out_dir(ensemble_signature(config), n_district)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     updaters = {
@@ -116,14 +130,53 @@ def generate_districts(config):
         epsilon=chain_epsilon
     )
 
-    # Create the Markov chain
-    chain = MarkovChain(
-        proposal=recom_proposal,
-        constraints=constraints,
-        accept=always_accept,
-        initial_state=initial_partition,
-        total_steps=chain_length,
-    )
+    # Choose the ensemble strategy: a neutral ReCom chain by default, or a
+    # Gingleator short-burst optimizer when the config asks to optimize a bloc's
+    # opportunity districts via "optimize_for_bloc".
+    optimize_bloc = config.get("optimize_for_bloc")
+    if optimize_bloc:
+        vap_alias = BLOC_TO_VAP_ALIAS.get(optimize_bloc)
+        if vap_alias is None:
+            raise ValueError(
+                f"optimize_for_bloc={optimize_bloc!r} must be one of "
+                f"{sorted(BLOC_TO_VAP_ALIAS)}."
+            )
+        threshold = config.get("optimize_threshold", 0.10)
+        burst_length = config.get("burst_length", 10)
+        num_bursts = chain_length // burst_length
+        total_steps = burst_length * num_bursts
+
+        optimizer = Gingleator(
+            recom_proposal,
+            constraints,
+            initial_partition,
+            minority_pop_col=vap_alias,
+            total_pop_col="VAP20",
+            threshold=threshold,
+            score_function=Gingleator.reward_partial_dist,
+        )
+
+        # short_bursts yields every observed partition (burst_length * num_bursts
+        # total); each burst restarts from the best-scoring plan found so far.
+        plan_stream = optimizer.short_bursts(burst_length, num_bursts)
+        chain_desc = (
+            f"{n_district} districts (short bursts, optimize {optimize_bloc} @ {threshold:.0%})"
+        )
+        print(
+            f"Optimizing for bloc '{optimize_bloc}' via short bursts: "
+            f"{num_bursts} bursts x {burst_length} steps = {total_steps} plans, "
+            f"threshold={threshold:.0%}\n"
+        )
+    else:
+        plan_stream = MarkovChain(
+            proposal=recom_proposal,
+            constraints=constraints,
+            accept=always_accept,
+            initial_state=initial_partition,
+            total_steps=chain_length,
+        )
+        total_steps = chain_length
+        chain_desc = f"{n_district} districts"
 
     output_path = (
             output_dir / 
@@ -135,21 +188,29 @@ def generate_districts(config):
         "population_column": population_column,
         "chain_length": chain_length,
         "epsilon":  seed_epsilon,
-        "seed": config['seed']
+        "seed": config['seed'],
+        "optimize_for_bloc": optimize_bloc,
     }
     
     with open(Path(str(output_path).replace(".jsonl.gz",".json")),"w") as f:
          json.dump(metadata_chain,f)
-    
+
+    # Export a PNG of each subsampled plan, on the same cadence the downstream
+    # steps use (sample_idx % subsample_interval == 0, sample_idx being the
+    # 0-based chain index), so images line up 1:1 with the settings files.
+    num_subsamples = config["num_subsamples"]
+    subsample_interval = max(1, chain_length // num_subsamples)
+    images_dir = get_district_images_dir(run_name, n_district)
+
     with gzip.open(
             output_path, mode="wt", encoding="utf-8"
         ) as gz_file:
             writer = jl.Writer(gz_file)
             for sample_num, step in enumerate(
                 tqdm(
-                    chain,
-                    total=chain_length,
-                    desc=f"{n_district} districts"
+                    plan_stream,
+                    total=total_steps,
+                    desc=chain_desc
                 ),
                 start=1
             ):
@@ -160,6 +221,18 @@ def generate_districts(config):
                     "assignment": assignment,
                     "sample": sample_num
                 })
+
+                sample_idx = sample_num - 1
+                if sample_idx % subsample_interval == 0:
+                    save_district_plan_png(
+                        gdf,
+                        assignment,
+                        images_dir / (
+                            f"{run_name}_{n_district}_district_plan_"
+                            f"{sample_idx:03d}.png"
+                        ),
+                        title=f"{run_name} — {n_district} districts (plan {sample_idx:03d})",
+                    )
             writer.close()
      
 

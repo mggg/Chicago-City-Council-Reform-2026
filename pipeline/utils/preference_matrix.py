@@ -1,99 +1,80 @@
 """
-Compute and persist candidate distance ("preference") matrices for ranked profiles.
+Compute and persist per-bloc candidate preference matrices from BlocSlateConfig.
 
-Wraps votekit's candidate_distance_matrix so the pipeline can, during election
-simulation, save one matrix per voter profile to a JSON file. The functions here
-are deliberately standalone (they take a RankProfile and paths, not a config) so
-they can be reused from notebooks or other scripts.
+Wraps BlocSlateConfig.preference_df so the profile-generation stage can save one
+preference matrix per (settings file, replicate) alongside the profile it
+produced. The functions here are deliberately standalone (they take a
+BlocSlateConfig and paths, not a settings dict) so they can be reused from
+notebooks or other scripts.
 """
 
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING
 
-from votekit import RankProfile
-from votekit.matrices import candidate_distance_matrix
+if TYPE_CHECKING:
+    from votekit.ballot_generator import BlocSlateConfig
 
 
-def compute_preference_matrix(
-    profile: RankProfile,
-    candidates: Optional[Sequence[str]] = None,
-) -> dict:
+def compute_preference_matrix(config: "BlocSlateConfig") -> dict:
     """
-    Compute the candidate distance ("preference") matrix for a ranked profile.
+    Extract the bloc x candidate preference matrix from a BlocSlateConfig.
 
-    Delegates to votekit.candidate_distance_matrix: the (i, j) entry is the
-    average ranking gap between candidates i and j over the ballots that rank i
-    at or above j (weighted by ballot weight). The matrix is non-symmetric and
-    uses NaN for pairs that never co-occur in that order; those NaNs are rendered
-    as JSON null so the payload is valid JSON.
+    config.preference_df holds, for each (bloc, candidate) pair, the share of
+    that bloc's within-slate support the candidate receives (populated by
+    set_dirichlet_alphas / resample_preference_intervals_from_dirichlet_alphas).
 
     Args:
-        profile: The ranked voter profile to analyze.
-        candidates: Candidate ids fixing the row/column order of the matrix.
-            Defaults to profile.candidates.
+        config: A BlocSlateConfig with preference_df already populated (i.e.
+            after set_dirichlet_alphas has been called).
 
     Returns:
         A JSON-serializable dict:
             {
-              "candidates": [<candidate id>, ...],   # row/column order
-              "matrix": [[float | None, ...], ...],  # NaN entries as null
+              "blocs": [<bloc name>, ...],           # row order
+              "candidates": [<candidate id>, ...],   # column order
+              "matrix": [[float, ...], ...],
             }
     """
-    candidates = list(profile.candidates) if candidates is None else list(candidates)
-
-    matrix = candidate_distance_matrix(profile, candidates)
-
+    df = config.preference_df
     return {
-        "candidates": candidates,
-        "matrix": [
-            [None if math.isnan(value) else float(value) for value in row]
-            for row in matrix
-        ],
+        "blocs": list(df.index),
+        "candidates": list(df.columns),
+        "matrix": df.to_numpy().tolist(),
     }
 
 
-def preference_matrix_json(
-    profile: RankProfile,
-    candidates: Optional[Sequence[str]] = None,
-    *,
-    indent: int = 2,
-) -> str:
+def preference_matrix_json(config: "BlocSlateConfig", *, indent: int = 2) -> str:
     """
-    Compute the preference matrix for a profile and serialize it to a JSON string.
+    Compute the preference matrix for a BlocSlateConfig and serialize it to a
+    JSON string.
 
-    Useful when the caller wants the bytes to write itself (e.g. into a shared zip
-    archive from the main process) rather than a file on disk.
+    Useful when the caller wants the bytes to write itself (e.g. into a shared
+    zip archive from the main process) rather than a file on disk.
 
     Args:
-        profile: The ranked voter profile to analyze.
-        candidates: Optional explicit candidate ordering (see
-            compute_preference_matrix).
+        config: A BlocSlateConfig with preference_df already populated.
         indent: json.dumps indentation.
 
     Returns:
         The matrix payload as a JSON string.
     """
-    return json.dumps(compute_preference_matrix(profile, candidates), indent=indent)
+    return json.dumps(compute_preference_matrix(config), indent=indent)
 
 
 def write_preference_matrix(
-    profile: RankProfile,
+    config: "BlocSlateConfig",
     output_path: str | Path,
-    candidates: Optional[Sequence[str]] = None,
 ) -> Path:
     """
-    Compute the preference matrix for a profile and write it to a JSON file,
-    creating parent directories as needed.
+    Compute the preference matrix for a BlocSlateConfig and write it to a JSON
+    file, creating parent directories as needed.
 
     Args:
-        profile: The ranked voter profile to analyze.
+        config: A BlocSlateConfig with preference_df already populated.
         output_path: Destination .json path.
-        candidates: Optional explicit candidate ordering (see
-            compute_preference_matrix).
 
     Returns:
         The output Path that was written.
@@ -101,45 +82,24 @@ def write_preference_matrix(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = compute_preference_matrix(profile, candidates)
+    payload = compute_preference_matrix(config)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
     return output_path
 
 
-def preference_matrix_arcname(profile_member: str) -> str:
+def preference_matrix_arcname(profile_filename: str) -> str:
     """
-    Build the preference-matrix entry name for a profile, mirroring the layout of
-    the profiles archive (<mode>/<district_count>/<file>).
-
-    Returns a forward-slash relative name suitable both as a zip entry name and,
-    joined onto a root, as a filesystem path (see preference_matrix_path).
+    Build the preference-matrix entry name for a profile filename, mirroring
+    profiles.zip's naming so the two archives' entries line up 1:1 once the
+    caller prefixes both with the same "<mode>/<district_count>/" path.
 
     Args:
-        profile_member: The profile's path within profiles.zip, e.g.
-            "slate_pl/10/<run>_..._district_00_v0.csv".
+        profile_filename: The profile's filename as written into profiles.zip,
+            e.g. "<run>_..._district_00_v0.csv".
 
     Returns:
-        "<mode>/<district_count>/<profile_stem>.json".
+        The same stem with a ".json" extension, e.g. "<run>_..._district_00_v0.json".
     """
-    parts = Path(profile_member).parts
-    mode, district_count = parts[0], parts[1]
-    stem = Path(parts[-1]).stem
-    return f"{mode}/{district_count}/{stem}.json"
-
-
-def preference_matrix_path(root: str | Path, profile_member: str) -> Path:
-    """
-    Build the preference-matrix output path for a profile under a filesystem root,
-    mirroring the profiles archive layout (<mode>/<district_count>/<file>).
-
-    Args:
-        root: The preference_matrices root directory, e.g.
-            outputs/<run_name>/preference_matrices.
-        profile_member: The profile's path within profiles.zip.
-
-    Returns:
-        Path root/<mode>/<district_count>/<profile_stem>.json.
-    """
-    return Path(root) / preference_matrix_arcname(profile_member)
+    return f"{Path(profile_filename).stem}.json"

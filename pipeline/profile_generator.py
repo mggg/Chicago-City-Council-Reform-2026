@@ -3,7 +3,8 @@ Generate voter preference profiles from district-level settings files.
 
 Reads VoteKit settings JSON files, generates synthetic voter profiles for
 each district, voter model, and replicate, and bundles the resulting profiles
-into a single zip archive per run for downstream election simulations.
+(plus each one's bloc x candidate preference matrix) into two zip archives per
+run for downstream election simulations and analysis.
 """
 
 from votekit.ballot_generator import (
@@ -18,6 +19,7 @@ from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
 from pathlib import Path
 from pipeline.utils.helpers import load_json, get_voter_models
+from pipeline.utils.preference_matrix import preference_matrix_arcname, preference_matrix_json
 import json
 import time
 import zipfile
@@ -33,11 +35,12 @@ generator_name_to_function = {
 
 def process_settings_file(settings_file, mode, duplicate_indx):
     """
-    Generate a voter profile for a single district using the given voter model.
+    Generate a voter profile and its preference matrix for a single district
+    using the given voter model.
 
     Runs entirely in memory (no filesystem write) so it can be called from a
     parallel worker and have its result written into the run's shared zip
-    archive by the caller, avoiding concurrent writes to one zip file.
+    archives by the caller, avoiding concurrent writes to one zip file.
 
     Args:
         settings_file: Path to a votekit settings json file for one district.
@@ -45,10 +48,12 @@ def process_settings_file(settings_file, mode, duplicate_indx):
         duplicate_indx: Replicate index, appended as _v<n> in the output filename.
 
     Returns:
-        (filename, csv_text): filename is the settings file's stem with
-        "sample_settings" replaced by "profile" and "_v<duplicate_indx>.csv"
+        (filename, csv_text, matrix_json): filename is the settings file's stem
+        with "sample_settings" replaced by "profile" and "_v<duplicate_indx>.csv"
         appended; csv_text is the profile's CSV content (per votekit's
-        PreferenceProfile.to_csv()).
+        PreferenceProfile.to_csv()); matrix_json is the BlocSlateConfig's bloc x
+        candidate preference matrix (see pipeline/utils/preference_matrix.py),
+        serialized to JSON.
     """
     settings = load_json(settings_file)
 
@@ -65,14 +70,15 @@ def process_settings_file(settings_file, mode, duplicate_indx):
     filename = f"{setting_file_stem.replace('sample_settings', 'profile')}_v{duplicate_indx}.csv"
     profile = generator_name_to_function[mode](config)
     csv_text = profile.to_csv()
+    matrix_json = preference_matrix_json(config)
 
-    return filename, csv_text
+    return filename, csv_text, matrix_json
 
 
 def generate_profiles(config):
     """
     Generate voter profiles for all districts, modes, and replicates in the config,
-    bundling them into a single zip archive per run.
+    bundling them (plus each one's preference matrix) into two zip archives per run.
 
     Args:
         config: Parsed config dict.
@@ -81,6 +87,10 @@ def generate_profiles(config):
         outputs/<run_name>/profiles.zip, containing one csv entry per
         (mode, district_num, settings file, replicate) at
         "<mode>/<district_num>/<...>_v<duplicate_indx>.csv".
+        outputs/<run_name>/preference_matrices.zip, containing one json entry
+        per profile (that profile's BlocSlateConfig bloc x candidate preference
+        matrix), at the same "<mode>/<district_num>/<...>_v<duplicate_indx>.json"
+        path so the two archives' entries line up 1:1.
     """
 
     num_reps = config['num_reps']
@@ -102,10 +112,11 @@ def generate_profiles(config):
 
     zip_path = Path(f"outputs/{run_name}/profiles.zip")
     zip_path.parent.mkdir(exist_ok=True, parents=True)
+    preference_matrix_zip_path = Path(f"outputs/{run_name}/preference_matrices.zip")
 
-    # Opened once for the whole run: workers only compute (filename, csv_text)
-    # pairs in parallel, and every actual write to the shared archive happens
-    # here, sequentially, in the main process.
+    # Opened once for the whole run: workers only compute (filename, csv_text,
+    # matrix_json) triples in parallel, and every actual write to the shared
+    # archives happens here, sequentially, in the main process.
     #
     # return_as="generator_unordered" makes Parallel yield each worker's result
     # as soon as it's ready, instead of collecting the whole batch (up to
@@ -115,7 +126,8 @@ def generate_profiles(config):
     # so a handful of unusually large profiles (e.g. a district whose slates
     # are heavily concentrated onto one demographic group) no longer forces
     # the entire batch to be held in memory at once.
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive, \
+         zipfile.ZipFile(preference_matrix_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as matrix_archive:
         # repeat for each replicate
         for duplicate_indx in range(num_reps):
             rep_start = time.perf_counter()
@@ -135,8 +147,12 @@ def generate_profiles(config):
                             for settings_file in all_settings_files
                         )
 
-                        for filename, csv_text in results:
+                        for filename, csv_text, matrix_json in results:
                             archive.writestr(f"{mode}/{district_num}/{filename}", csv_text)
+                            matrix_archive.writestr(
+                                f"{mode}/{district_num}/{preference_matrix_arcname(filename)}",
+                                matrix_json,
+                            )
             rep_elapsed = time.perf_counter() - rep_start
             print(f"[rep {duplicate_indx + 1}/{num_reps}] Done in {rep_elapsed:.1f}s")
 

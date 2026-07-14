@@ -122,10 +122,10 @@ def has_valid_profiles(config):
     # Checked per (mode, district_count) pair, not summed across district_configs,
     # so a complete district count can't mask an incomplete one when a config has
     # more than one entry in district_configs.
-    expected_per_district_count = config["num_subsamples"] * config["num_reps"]
     for mode in get_voter_models(config):
         for d in config["district_configs"]:
             n = d["num_districts"]
+            expected_per_district_count = config["num_subsamples"] * n * config["num_reps"]
             prefix = f"{mode}/{n}/"
             count = sum(1 for m in members if m.startswith(prefix) and m.endswith(".csv"))
             if count != expected_per_district_count:
@@ -173,7 +173,13 @@ def has_valid_summaries(config):
     if not base.is_dir() or not figs.is_dir() or not csv.is_file():
         print("Summaries do not exist. Running pipeline from summary stage.")
         return False
-    expected_figs = sum(2 if d["winners"] == 1 else 1 for d in config["district_configs"])
+    # simulate_elections runs every district_config against every voting rule
+    # (see pipeline/simulate_elections.py), and summarize_results draws a bymode
+    # + byslate figure per (district-magnitude, method) pair plus one
+    # bubbles-by-method figure per district-magnitude.
+    distinct_magnitudes = len({(d["num_districts"], d["winners"]) for d in config["district_configs"]})
+    num_methods = len(config["voting_configs"])
+    expected_figs = distinct_magnitudes * (2 * num_methods + 1)
     actual_figs = sum(1 for _ in figs.glob("*.png"))
     if actual_figs != expected_figs:
         print("Incorrect number of figures.")
@@ -258,13 +264,19 @@ def run_pipeline(config):
 
 def main():
     # configurations = load_all_config_files(config_dir="configs")
-    configurations = [load_config("testing/configs/basic.json")]
+    configurations = [
+                        load_config("configs/low-poc-turnout.json"), 
+                        load_config("configs/basic.json"), 
+                        load_config("configs/50-irv.json"),
+                        load_config("configs/asian-seperate-bloc.json")
+                        ]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
     generate_data()
 
     # Run pipeline for all configurations in configs/
     for config in configurations:
+        print("="*20,f"\n Running {config["run_name"]}\n","="*20)
         run_pipeline(config)
 
     plot_combined_bubbles_all_runs(config)

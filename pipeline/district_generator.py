@@ -141,8 +141,8 @@ def generate_districts(config):
                 f"optimize_for_bloc={optimize_bloc!r} must be one of "
                 f"{sorted(BLOC_TO_VAP_ALIAS)}."
             )
-        threshold = config.get("optimize_threshold", 0.10)
-        burst_length = config.get("burst_length", 10)
+        threshold = config.get("optimize_threshold", 0.15)
+        burst_length = config.get("burst_length", 100)
         num_bursts = chain_length // burst_length
         total_steps = burst_length * num_bursts
 
@@ -153,7 +153,7 @@ def generate_districts(config):
             minority_pop_col=vap_alias,
             total_pop_col="VAP20",
             threshold=threshold,
-            score_function=Gingleator.reward_partial_dist,
+            score_function=Gingleator.num_opportunity_dists,
         )
 
         # short_bursts yields every observed partition (burst_length * num_bursts

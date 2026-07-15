@@ -1,5 +1,5 @@
 {
-  "run_name": "50 X 1 IRV - Larger Asian Districts",
+  "run_name": "50 X 1 PSMD - Larger Asian Districts",
 
   "geodata_path": "./data/chicago_precincts_vap_cvap.gpkg",
 
@@ -18,7 +18,7 @@
   "total_seats": 50,
 
   "optimize_for_bloc": "A",
-  "optimize_threshold": 0.15,
+  "optimize_threshold": 0.20,
   "burst_length": 100,
 
   "total_candidates": 12,
@@ -26,7 +26,7 @@
   "epsilon": 0.05,
 
   "voting_configs": {
-    "IRV": { "tiebreak": "random" }
+    "Plurality": { "tiebreak": "random" }
   },
 
   "voter_models": ["slate_pl", "slate_bt"],
@@ -66,7 +66,7 @@
     "H": { "W": 1, "B": 1, "H": 1, "A": 1 }
   },
 
-  "num_reps": 3,
+  "num_reps": 5,
 
   "seed": 42
 }

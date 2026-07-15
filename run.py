@@ -62,6 +62,14 @@ def has_valid_district_outputs(config) -> bool:
     # not be reused. .get keeps neutral configs (no such key) comparing equal.
     if config.get("optimize_for_bloc") != config_md.get("optimize_for_bloc"):
         return False
+
+    # Same reasoning for the Gingleator tuning values themselves: changing
+    # optimize_threshold or burst_length changes what the optimizer actually did,
+    # so a chain generated under different values must not be reused.
+    if config.get("optimize_threshold") != config_md.get("optimize_threshold"):
+        return False
+    if config.get("burst_length") != config_md.get("burst_length"):
+        return False
     
     for d in config["district_configs"]:
         f = base / f"{d['num_districts']}_districts.jsonl.gz"
@@ -265,10 +273,7 @@ def run_pipeline(config):
 def main():
     # configurations = load_all_config_files(config_dir="configs")
     configurations = [
-                        load_config("configs/low-poc-turnout.json"), 
-                        load_config("configs/basic.json"), 
-                        load_config("configs/50-irv.json"),
-                        load_config("configs/asian-seperate-bloc.json")
+                        load_config("configs/50-psmd-asian-optimized.json"), 
                         ]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

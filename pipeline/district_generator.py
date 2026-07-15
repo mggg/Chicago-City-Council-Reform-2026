@@ -141,8 +141,21 @@ def generate_districts(config):
                 f"optimize_for_bloc={optimize_bloc!r} must be one of "
                 f"{sorted(BLOC_TO_VAP_ALIAS)}."
             )
-        threshold = config.get("optimize_threshold", 0.15)
-        burst_length = config.get("burst_length", 100)
+        # Gingleator tuning values must be set explicitly in the config -- no
+        # code-side defaults -- so the config file is the single source of truth
+        # for what a given optimized ensemble actually did.
+        if "optimize_threshold" not in config:
+            raise ValueError(
+                "optimize_for_bloc is set, so 'optimize_threshold' must also be set "
+                "in the config (e.g. 0.15)."
+            )
+        if "burst_length" not in config:
+            raise ValueError(
+                "optimize_for_bloc is set, so 'burst_length' must also be set in the "
+                "config (e.g. 100)."
+            )
+        threshold = config["optimize_threshold"]
+        burst_length = config["burst_length"]
         num_bursts = chain_length // burst_length
         total_steps = burst_length * num_bursts
 
@@ -190,6 +203,8 @@ def generate_districts(config):
         "epsilon":  seed_epsilon,
         "seed": config['seed'],
         "optimize_for_bloc": optimize_bloc,
+        "optimize_threshold": config.get("optimize_threshold"),
+        "burst_length": config.get("burst_length"),
     }
     
     with open(Path(str(output_path).replace(".jsonl.gz",".json")),"w") as f:

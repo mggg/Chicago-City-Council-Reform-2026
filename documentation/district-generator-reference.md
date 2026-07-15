@@ -25,6 +25,19 @@ Example:
 
   "num_subsamples": 5,  <-- Determines the number of districting plans to select from all the simulated ones
 
+  "optimize_for_bloc": "A",  <-- Optional. One of "W", "B", "H", "A". If set, replaces the
+                                  neutral MarkovChain with a Gingleator short-burst optimizer
+                                  that biases the ensemble toward higher-opportunity districts
+                                  for this bloc. Omit entirely for a neutral ensemble.
+
+  "optimize_threshold": 0.15,  <-- Required if optimize_for_bloc is set. The minority-VAP-share
+                                    threshold Gingleator counts a district as an "opportunity
+                                    district" against (passed to Gingleator's threshold=).
+
+  "burst_length": 100,  <-- Required if optimize_for_bloc is set. Steps per short burst;
+                             num_bursts = chain_length // burst_length. Each burst restarts
+                             from the best-scoring plan found so far.
+
   "total_seats": 12,
 
   "epsilon":  0.01, <-- Margin error of the initial partition to create. Input for the MC

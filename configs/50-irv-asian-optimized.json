@@ -21,7 +21,7 @@
   "optimize_threshold": 0.15,
   "burst_length": 100,
 
-  "total_candidates": 12,
+  "total_candidates": 6,
 
   "epsilon": 0.05,
 

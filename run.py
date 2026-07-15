@@ -281,7 +281,7 @@ def main():
 
     # Run pipeline for all configurations in configs/
     for config in configurations:
-        print("="*20,f"\n Running {config["run_name"]}\n","="*20)
+        print("="*100,f"\n Running {config["run_name"]}\n","="*20)
         run_pipeline(config)
 
     plot_combined_bubbles_all_runs(config)

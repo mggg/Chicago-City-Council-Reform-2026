@@ -101,10 +101,13 @@ reference lines).
 
 ### Basic – 50×1 Plurality
 
-`Basic – 50×1 Plurality` hasn't been re-run under the current settings yet, so
-its figures aren't included here — this section will be updated once that run
-completes.
+![Basic by-mode histogram](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_PLURALITY_bymode.png)
 
+![Basic bubble plot](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_bubbles_by_method.png)
+
+![Basic by-slate panel](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_PLURALITY_byslate.png)
+
+<div style="page-break-after: always;"></div>
 
 ### 10 × 5 STV
 
@@ -114,15 +117,17 @@ completes.
 
 ![10 X 5 STV by-slate panel](../figures/10%20X%205%20STV/10%20X%205%20STV_10x50_FASTSTV_byslate.png)
 
+<div style="page-break-after: always;"></div>
 
 ### 10 × 3 STV
 
-![10 X 3 STV by-mode histogram](../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_FASTSTV_bymode.png)
+![10 X 3 STV by-mode histogram](../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_STV_bymode.png)
 
 ![10 X 3 STV bubble plot](../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_bubbles_by_method.png)
 
-![10 X 3 STV by-slate panel](../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_FASTSTV_byslate.png)
+![10 X 3 STV by-slate panel](../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_STV_byslate.png)
 
+<div style="page-break-after: always;"></div>
 
 ### Low POC Turnout
 
@@ -132,16 +137,85 @@ completes.
 
 ![Low POC Turnout by-slate panel](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_FASTSTV_byslate.png)
 
+<div style="page-break-after: always;"></div>
 
-### Asian Bloc Separate – Basic
+### 10 × 5 STV - Asian Bloc Separate
 
-![Asian Bloc Separate by-mode histogram](../figures/Asian%20Bloc%20Separate%20-%20Basic/Asian%20Bloc%20Separate%20-%20Basic_10x50_FASTSTV_bymode.png)
+![Asian Bloc Separate by-mode histogram](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x50_FASTSTV_bymode.png)
 
-![Asian Bloc Separate bubble plot](../figures/Asian%20Bloc%20Separate%20-%20Basic/Asian%20Bloc%20Separate%20-%20Basic_10x50_bubbles_by_method.png)
+![Asian Bloc Separate bubble plot](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x50_bubbles_by_method.png)
 
-![Asian Bloc Separate by-slate panel](../figures/Asian%20Bloc%20Separate%20-%20Basic/Asian%20Bloc%20Separate%20-%20Basic_10x50_FASTSTV_byslate.png)
+![Asian Bloc Separate by-slate panel](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x50_FASTSTV_byslate.png)
 
+<div style="page-break-after: always;"></div>
+
+### 10 × 5 STV - Larger Asian Districts
+
+Gingleator short-burst optimized ensemble (`asian_optimized.json`), biasing the
+10-district chain toward higher-Asian-VAP-share districts instead of the neutral
+ReCom chain the other STV runs use.
+
+![10 X 5 STV Larger Asian Districts by-mode histogram](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_STV_bymode.png)
+
+![10 X 5 STV Larger Asian Districts bubble plot](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_bubbles_by_method.png)
+
+![10 X 5 STV Larger Asian Districts by-slate panel](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_STV_byslate.png)
+
+<div style="page-break-after: always;"></div>
+
+### 50 × 1 IRV
+
+Single-member wards (neutral districting), elected by Instant-Runoff Voting
+instead of plurality — otherwise the same setup as Basic.
+
+![50 X 1 IRV by-mode histogram](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_IRV_bymode.png)
+
+![50 X 1 IRV bubble plot](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_bubbles_by_method.png)
+
+![50 X 1 IRV by-slate panel](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_IRV_byslate.png)
+
+<div style="page-break-after: always;"></div>
+
+### 50 × 1 IRV - Larger Asian Districts
+
+Single-member wards, IRV, with the same Gingleator opportunity-district
+optimizer applied to the 50-district ensemble (`50-irv-asian-optimized.json`).
+
+![50 X 1 IRV Larger Asian Districts by-mode histogram](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_IRV_bymode.png)
+
+![50 X 1 IRV Larger Asian Districts bubble plot](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png)
+
+![50 X 1 IRV Larger Asian Districts by-slate panel](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_IRV_byslate.png)
+
+<div style="page-break-after: always;"></div>
+
+### 50 × 1 PSMD - Larger Asian Districts
+
+Single-member wards, Plurality (PSMD), with the Gingleator opportunity-district
+optimizer applied (`50-psmd-asian-optimized.json`) — the plurality counterpart
+to the IRV-optimized run above.
+
+![50 X 1 PSMD Larger Asian Districts by-mode histogram](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_PLURALITY_bymode.png)
+
+![50 X 1 PSMD Larger Asian Districts bubble plot](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png)
+
+![50 X 1 PSMD Larger Asian Districts by-slate panel](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_PLURALITY_byslate.png)
+
+<div style="page-break-after: always;"></div>
 
 ### Questions and Thoughts
 
 Right now, one of the biggest surprises being observed is that 50 X 1 PSMD and 50 X 1 IRV see better representation for Asian voters - particularly when they're impulsive. 
+
+<div style="page-break-after: always;"></div>
+
+### Asian Coalition Win Rate by District Rank (50 × 1 PSMD)
+
+Districts within each sampled plan are ranked by Asian share of VAP (low to
+high) and pooled across all 50 plans; each box shows the distribution of Asian
+VAP share at that rank, colored by how often an Asian-preferred candidate
+actually won a seat at that rank (red = never won). Win rate climbs sharply
+only in the top few ranks, well before Asian VAP share becomes anything close
+to a majority.
+
+![Asian coalition win rate boxplot](../figures/pl-coalition-percent.png)

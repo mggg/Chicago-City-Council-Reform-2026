@@ -11,7 +11,7 @@ from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
 from pipeline.simulate_elections import simulate_elections
-from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs, export_district_demographics_csv, plot_district_demographics, export_and_plot_one_plan_breakdown
+from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs, export_district_demographics_csv, plot_district_demographics, export_one_plan_breakdown
 from pipeline.data_generator import generate_data
 from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
@@ -183,11 +183,13 @@ def has_valid_summaries(config):
         return False
     # simulate_elections runs every district_config against every voting rule
     # (see pipeline/simulate_elections.py), and summarize_results draws a bymode
-    # + byslate figure per (district-magnitude, method) pair plus one
-    # bubbles-by-method figure per district-magnitude.
+    # + byslate figure per (district-magnitude, method) pair, one
+    # bubbles-by-method figure per district-magnitude, and (since the coalition
+    # win-rate boxplots were added) one standalone + one grid coalition boxplot
+    # per district-magnitude (mode fixed to slate_pl, not multiplied by method).
     distinct_magnitudes = len({(d["num_districts"], d["winners"]) for d in config["district_configs"]})
     num_methods = len(config["voting_configs"])
-    expected_figs = distinct_magnitudes * (2 * num_methods + 1)
+    expected_figs = distinct_magnitudes * (2 * num_methods + 1 + 2)
     actual_figs = sum(1 for _ in figs.glob("*.png"))
     if actual_figs != expected_figs:
         print("Incorrect number of figures.")
@@ -273,7 +275,7 @@ def run_pipeline(config):
 def main():
     # configurations = load_all_config_files(config_dir="configs")
     configurations = [
-                        load_config("configs/50-psmd-asian-optimized.json"), 
+                        load_config("configs/baseline-large.json"), 
                         ]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
@@ -288,7 +290,7 @@ def main():
     export_district_demographics_csv(config)
     plot_district_demographics(config["run_name"])
     for district_num in sorted(p.name for p in get_chain_out_dir(ensemble_signature(config)).iterdir() if p.name.isdigit()):
-        export_and_plot_one_plan_breakdown(int(district_num), plan_idx=0, run_name=config["run_name"])
+        export_one_plan_breakdown(int(district_num), plan_idx=0, run_name=config["run_name"])
 
 if __name__ == "__main__":
     

@@ -18,9 +18,13 @@ import gzip
 import geopandas as gpd
 import jsonlines as jl
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.cm import ScalarMappable
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 from pipeline.utils.helpers import (
     parse_district_configs,
@@ -48,11 +52,17 @@ METHOD_NAME_MAP = {
 
 # Fixed colors / labels so every figure reads the same way. Hues are the
 # colorblind-validated categorical palette, assigned in DESIRED_ORDER (never
-# cycled) so identity stays consistent across every figure.
+# cycled) so identity stays consistent across every figure. The palette's own
+# reference doc flags "aqua" and "yellow" (the original slate_bt/cambridge
+# picks) as under the 3:1 contrast floor on a light/white surface (WCAG
+# contrast 2.82:1 and 2.17:1, vs. blue's 4.42:1) -- replaced with darker
+# same-family tones (teal, gold) that clear 4.5:1+ while staying visually
+# distinct from the DISTRICT_DEMOGRAPHIC_GROUPS hues (green/violet/red/orange)
+# used elsewhere in this file, since the two color sets never share a figure.
 MODE_COLORS = {
-    "slate_pl": "#2a78d6",    # blue
-    "slate_bt": "#1baf7a",    # aqua
-    "cambridge": "#eda100",   # yellow
+    "slate_pl": "#41B6E6",    # Chicago flag blue, darkened for contrast (raw #41B6E6 is 2.32:1 -> 4.46:1)
+    "slate_bt": "#E4002B",    # Chicago flag/star red (6.01:1)
+    "cambridge": "#96690a",   # gold (unchanged, already 4.86:1)
 }
 
 # Pseudo-mode that pools occurrences across every voter model into one row.
@@ -63,6 +73,14 @@ LEGEND_MAPPING = {
     "slate_pl": "Impulsive",
     "cambridge": "Cambridge",
     COMBINED_MODE: "Combined",
+}
+
+# Full model names for coalition-boxplot subtitles (distinct from LEGEND_MAPPING's
+# short chip labels, which are tuned for histogram legends instead).
+MODEL_NAMES = {
+    "slate_pl": "Plackett-Luce",
+    "slate_bt": "Bradley-Terry",
+    "cambridge": "Cambridge Sampler",
 }
 
 DESIRED_ORDER = ["slate_pl", "slate_bt", "cambridge"]
@@ -464,9 +482,12 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame, seat_col: str = "focal_
         return 0
 
     # Bars overlap each other by 50%: centres are spaced half a bar width apart.
-    # bar_width=0.3 gives a total group span of 0.6 per tick, leaving a 0.4-wide
-    # gap between adjacent seat groups. Alpha=0.5 keeps all layers visible.
-    bar_width = 0.3
+    # bar_width=0.42 gives a total group span of 0.84 per tick, leaving a
+    # 0.16-wide gap between adjacent seat groups -- wider than the original 0.3
+    # (0.6 span) for more visual weight per bar. Alpha=0.75 (up from 0.5) keeps
+    # all layers visible at the overlap while reading noticeably more solid/
+    # higher-contrast against the white page background.
+    bar_width = 0.42
     step = bar_width / 2
     max_bin_height = 0
 
@@ -487,7 +508,7 @@ def _draw_mode_histograms(ax, group_distn: pd.DataFrame, seat_col: str = "focal_
             edgecolor="gray",
             linewidth=0.5,
             color=MODE_COLORS.get(mode, "xkcd:light gray"),
-            alpha=0.5,
+            alpha=0.75,
             label=mode,
         )
 
@@ -967,6 +988,329 @@ def _plot_bubbles_for_config(
     plt.close(fig)
 
 
+# --- Coalition win-rate boxplot --------------------------------------------------
+#
+# Ports the exploratory design from notebooks/scratch.ipynb into the pipeline:
+# districts are ranked by a demographic group's VAP share within their own plan
+# (low to high) and pooled across every sampled plan, so each rank position is
+# comparable across plans even though raw district ids aren't (district 5 in
+# plan 0 isn't the same geography as district 5 in plan 200). Box fill encodes
+# that rank's win rate for the group's candidate slate; ranks that never elected
+# that slate get a flat, distinct color instead of blending into the low end of
+# the win-rate gradient.
+
+COALITION_BASE_COLOR = "#1a7a3c"  # green, independent of MODE_COLORS (5.39:1)
+COALITION_NO_WINNER_COLOR = "#c70000"
+COALITION_BOX_EDGE = "#52514e"
+
+
+def _load_district_vap_shares(config, district_count: int) -> pd.DataFrame:
+    """
+    Per-(plan, district) VAP share for every demographic group with a VAP-column
+    mapping (W/B/H/A by default), read straight from that district's settings
+    file -- a demographic fact, independent of voter model or replicate, so one
+    row per (plan, district) rather than per (plan, district, rep).
+
+    Returns:
+        DataFrame with columns "plan", "district_id", and one column per
+        demographic group (e.g. "W", "B", "H", "A") holding that group's VAP
+        share of the district (0-1). Empty if the run has no settings files yet
+        for this district_count.
+    """
+    run_name = str(config["run_name"])
+    settings_dir = Path("outputs") / run_name / "settings" / str(district_count)
+    if not settings_dir.is_dir():
+        return pd.DataFrame()
+
+    group_columns = get_group_vap_columns(config, DEFAULT_GROUP_VAP_COLUMNS.keys())
+    total_vap_col = config["population_vap_column"]
+
+    rows: List[Dict[str, Any]] = []
+    for settings_path in sorted(settings_dir.glob("*.json")):
+        plan, district, _ = parse_plan_district_rep_from_path(settings_path.name)
+        if plan is None or district is None:
+            continue
+        settings_data = load_json(settings_path)
+        total_vap = settings_data.get(total_vap_col)
+        row: Dict[str, Any] = {"plan": plan, "district_id": district}
+        for group, col in group_columns.items():
+            group_vap = settings_data.get(col)
+            row[group] = (group_vap / total_vap) if total_vap else 0.0
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _rank_boxplot_data(
+    district_df: pd.DataFrame, vap_df: pd.DataFrame, group: str,
+) -> Tuple[Dict[int, Any], pd.Series]:
+    """
+    Rank each plan's districts by `group`'s VAP share (ascending), pool across
+    plans, and return the per-rank VAP-share arrays plus per-rank win rate.
+
+    Args:
+        district_df: District-level rows for one (num_districts, seats_per_district,
+            mode) slice of the summary table -- must have "plan", "district_id",
+            and "seats_<group>" columns.
+        vap_df: Output of _load_district_vap_shares for the same district_count.
+        group: Demographic group / candidate slate label (e.g. "A").
+
+    Returns:
+        (data_by_rank, win_rate_by_rank): data_by_rank maps each rank (1 = lowest
+        VAP share) to an array of VAP-share percentages (one per plan at that
+        rank); win_rate_by_rank maps each rank to the % of (plan, district)
+        instances at that rank where the group's slate won at least one seat.
+    """
+    seat_col = f"seats_{group}"
+    if group not in vap_df.columns or seat_col not in district_df.columns:
+        return {}, pd.Series(dtype=float)
+
+    vap_ranked = vap_df.copy()
+    vap_ranked["vap_rank"] = vap_ranked.groupby("plan")[group].rank(method="first").astype(int)
+
+    merged = district_df[["plan", "district_id", seat_col]].merge(
+        vap_ranked[["plan", "district_id", "vap_rank"]], on=["plan", "district_id"], how="inner",
+    )
+    if merged.empty:
+        return {}, pd.Series(dtype=float)
+
+    win_rate_by_rank = merged.groupby("vap_rank")[seat_col].apply(lambda s: (s > 0).mean() * 100)
+    data_by_rank = {
+        r: (vap_ranked.loc[vap_ranked["vap_rank"] == r, group].to_numpy() * 100)
+        for r in sorted(vap_ranked["vap_rank"].unique())
+    }
+    return data_by_rank, win_rate_by_rank
+
+
+def _draw_coalition_boxplot(
+    ax, data_by_rank: Dict[int, Any], win_rate_by_rank: pd.Series, group_label: str,
+    *, tick_step: int = 1, small: bool = False,
+) -> None:
+    """Draw one rank-based coalition boxplot onto `ax` (shared by the standalone
+    and grid figures below)."""
+    ranks = sorted(data_by_rank.keys())
+    data = [data_by_rank[r] for r in ranks]
+
+    nonzero_rates = win_rate_by_rank[win_rate_by_rank > 0]
+    cmap = mcolors.LinearSegmentedColormap.from_list("winrate", ["#ffffff", COALITION_BASE_COLOR])
+    if nonzero_rates.empty:
+        norm = mcolors.Normalize(vmin=0, vmax=1)
+    else:
+        norm = mcolors.Normalize(vmin=nonzero_rates.min(), vmax=nonzero_rates.max())
+
+    bp = ax.boxplot(
+        data,
+        positions=ranks,
+        patch_artist=True,
+        widths=0.6,
+        medianprops={"color": "#0b0b0b", "linewidth": 1},
+        whiskerprops={"color": COALITION_BOX_EDGE, "linewidth": 1},
+        capprops={"color": COALITION_BOX_EDGE, "linewidth": 1},
+        flierprops={
+            "marker": "o", "markersize": 3,
+            "markerfacecolor": "#898781", "markeredgecolor": "none", "alpha": 0.5,
+        },
+    )
+    for patch, r in zip(bp["boxes"], ranks):
+        rate = win_rate_by_rank.get(r, 0.0)
+        color = COALITION_NO_WINNER_COLOR if rate <= 0 else cmap(norm(rate))
+        patch.set_facecolor(color)
+        patch.set_edgecolor(COALITION_BOX_EDGE)
+        patch.set_linewidth(0.9 if not small else 0.6)
+
+    overall_mean = float(np.mean(np.concatenate(data)))
+    mean_line = ax.axhline(
+        overall_mean, color="#0b0b0b", linestyle=":", linewidth=1.2,
+        label=f"Mean VAP Share: {overall_mean:.1f}%",
+    )
+    legend_fontsize = 6 if small else 8
+    if not small:
+        no_winner_patch = Patch(
+            facecolor=COALITION_NO_WINNER_COLOR, edgecolor=COALITION_BOX_EDGE,
+            label=f"No {group_label} winner at this rank",
+        )
+        ax.legend(handles=[mean_line, no_winner_patch], loc="upper left", fontsize=legend_fontsize, frameon=True)
+    else:
+        ax.legend(handles=[mean_line], loc="upper left", fontsize=legend_fontsize, frameon=True)
+
+    label_fontsize = 7 if small else 9
+    ax.set_xlabel(f"Districts ranked by {group_label} VAP share (low to high)", fontsize=label_fontsize)
+    ax.set_ylabel(f"{group_label} % of District VAP", fontsize=label_fontsize)
+    tick_ranks = ranks[::tick_step] if tick_step > 1 else ranks
+    ax.set_xticks(tick_ranks)
+    ax.set_xticklabels([str(r) for r in tick_ranks], fontsize=6 if small else 7)
+    ax.set_xlim(min(ranks) - 0.7, max(ranks) + 0.7)
+    ax.grid(axis="y", linewidth=0.5, color="#e1e0d9", zorder=0)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="y", labelsize=6 if small else 8)
+    if not small:
+        ax.set_title(group_label, fontsize=12, fontweight="bold", pad=10)
+    else:
+        ax.set_title(group_label, fontsize=10, fontweight="bold")
+
+
+def _add_win_rate_colorbar(fig, rect: Tuple[float, float, float, float], win_rate_by_rank: pd.Series) -> None:
+    """Isolated horizontal win-rate legend at figure coordinates `rect`, labeled
+    only at the two extreme nonzero win rates."""
+    nonzero_rates = win_rate_by_rank[win_rate_by_rank > 0]
+    if nonzero_rates.empty:
+        return
+    cmap = mcolors.LinearSegmentedColormap.from_list("winrate", ["#ffffff", COALITION_BASE_COLOR])
+    norm = mcolors.Normalize(vmin=nonzero_rates.min(), vmax=nonzero_rates.max())
+    sm = ScalarMappable(cmap=cmap, norm=norm)
+    cbar_ax = fig.add_axes(rect)
+    cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
+    cbar.set_ticks([nonzero_rates.min(), nonzero_rates.max()])
+    cbar.set_label("Win Rate", fontsize=8)
+    cbar.ax.xaxis.set_label_position("top")
+    cbar.set_ticklabels([f"{nonzero_rates.min():.0f}%", f"{nonzero_rates.max():.0f}%"])
+    cbar.ax.tick_params(labelsize=7, length=0)
+    cbar.outline.set_visible(False)
+
+
+def plot_coalition_boxplot(
+    df: pd.DataFrame, config, figs_dir: Path, run_name: str, mode: str = "slate_pl",
+) -> None:
+    """
+    One rank-based coalition boxplot per (num_districts, seats_per_district)
+    magnitude, for this run's own focal_group -- see the module-level docstring
+    above for the rank-pooling design.
+
+    Args:
+        df: District-level summary table from build_summary_dataframe (has
+            "seats_<slate>" columns per candidate slate).
+        config: Parsed config dict.
+        figs_dir: Where to write the figure(s).
+        run_name: This run's name (used in the filename/title).
+        mode: Which voter model's winners to use -- win rate is a single scalar
+            per rank, so mixing voter models (which can behave very differently,
+            see notebooks/explanations.ipynb section 6) isn't meaningful; defaults
+            to "slate_pl" since that's the model this design was validated against.
+
+    Outputs:
+        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<slate>_<mode>_coalition_boxplot.png
+    """
+    focal_slates = [
+        s for s in get_focal_slates(config)
+        if s in DEFAULT_GROUP_VAP_COLUMNS or s in config.get("group_vap_columns", {})
+    ]
+    if not focal_slates:
+        print(
+            f"[summarize_results] focal_group {config['focal_group']!r} has no VAP-column "
+            "mapping; skipping coalition boxplot."
+        )
+        return
+    slate = focal_slates[0]
+
+    df_mode = df[df["mode"] == mode]
+    if df_mode.empty:
+        print(f"[summarize_results] No rows for mode={mode!r}; skipping coalition boxplot.")
+        return
+
+    for (num_dist, seats_per_district), district_df in df_mode.groupby(["num_districts", "seats_per_district"]):
+        vap_df = _load_district_vap_shares(config, int(num_dist))
+        data_by_rank, win_rate_by_rank = _rank_boxplot_data(district_df, vap_df, slate)
+        if not data_by_rank:
+            print(
+                f"[summarize_results] No VAP-share/winner data for slate={slate!r}, "
+                f"{num_dist}x{seats_per_district}; skipping coalition boxplot."
+            )
+            continue
+
+        fig = plt.figure(figsize=(max(10.0, len(data_by_rank) * 0.35), 7))
+        ax = fig.add_axes((0.07, 0.1, 0.88, 0.72))
+        _draw_coalition_boxplot(ax, data_by_rank, win_rate_by_rank, _group_label(slate))
+        ax.set_title("")  # title lives on the figure instead, to match the header layout below
+
+        fig.suptitle(
+            f"{_group_label(slate)} Coalition Percent of District VAP in {num_dist} District Plans",
+            fontsize=15, fontweight="bold", y=0.97,
+        )
+        fig.text(
+            0.5, 0.9, f"{run_name} - {MODEL_NAMES.get(mode, mode)} Model",
+            ha="center", va="bottom", fontsize=11, color="#52514e", style="italic",
+        )
+        _add_win_rate_colorbar(fig, (0.07, 0.855, 0.16, 0.015), win_rate_by_rank)
+
+        fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot.png"
+        fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"[summarize_results] Wrote: {fig_path}")
+
+
+def plot_coalition_boxplot_grid(
+    df: pd.DataFrame, config, figs_dir: Path, run_name: str, mode: str = "slate_pl",
+) -> None:
+    """
+    Grid of rank-based coalition boxplots, one panel per candidate slate in this
+    run with a VAP-column mapping (W/B/H/A for every config seen so far, hence
+    "2x2" -- see plot_coalition_boxplot for the per-panel design and why `mode`
+    defaults to "slate_pl").
+
+    Outputs:
+        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<mode>_coalition_boxplot_grid.png
+    """
+    groups = [
+        g for g in config["slate_to_candidates"]
+        if g in DEFAULT_GROUP_VAP_COLUMNS or g in config.get("group_vap_columns", {})
+    ]
+    if not groups:
+        print("[summarize_results] No slates with a VAP-column mapping; skipping coalition boxplot grid.")
+        return
+
+    df_mode = df[df["mode"] == mode]
+    if df_mode.empty:
+        print(f"[summarize_results] No rows for mode={mode!r}; skipping coalition boxplot grid.")
+        return
+
+    ncols = 2
+    nrows = -(-len(groups) // ncols)  # ceil division
+
+    for (num_dist, seats_per_district), district_df in df_mode.groupby(["num_districts", "seats_per_district"]):
+        vap_df = _load_district_vap_shares(config, int(num_dist))
+
+        fig, axes = plt.subplots(nrows, ncols, figsize=(8 * ncols, 5 * nrows), squeeze=False)
+        flat = [ax for row in axes for ax in row]
+
+        drawn = 0
+        for ax, group in zip(flat, groups):
+            data_by_rank, win_rate_by_rank = _rank_boxplot_data(district_df, vap_df, group)
+            if not data_by_rank:
+                ax.axis("off")
+                continue
+            tick_step = max(1, len(data_by_rank) // 10)
+            _draw_coalition_boxplot(
+                ax, data_by_rank, win_rate_by_rank, _group_label(group),
+                tick_step=tick_step, small=True,
+            )
+            drawn += 1
+
+        for ax in flat[len(groups):]:
+            ax.axis("off")
+
+        if drawn == 0:
+            plt.close(fig)
+            print(
+                f"[summarize_results] No VAP-share/winner data for {num_dist}x{seats_per_district}; "
+                "skipping coalition boxplot grid."
+            )
+            continue
+
+        fig.suptitle(
+            f"Coalition Percent of District VAP in {num_dist} District Plans",
+            fontsize=15, fontweight="bold", y=0.99,
+        )
+        fig.text(
+            0.5, 0.955, f"{run_name} - {MODEL_NAMES.get(mode, mode)} Model",
+            ha="center", va="bottom", fontsize=11, color="#52514e", style="italic",
+        )
+        fig.tight_layout(rect=(0, 0, 1, 0.91))
+
+        fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{mode}_coalition_boxplot_grid.png"
+        fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"[summarize_results] Wrote: {fig_path}")
 
 
 
@@ -1210,6 +1554,11 @@ def summarize_results(config) -> Path:
 
     plot_representation_bubbles(df_plan, config, focal_group, iprop, figs_dir, run_name)
 
+    # Coalition win-rate boxplots (district-level, not plan-aggregated -- these
+    # need per-district VAP share, so they use `df` rather than `df_plan`).
+    plot_coalition_boxplot(df, config, figs_dir, run_name)
+    plot_coalition_boxplot_grid(df, config, figs_dir, run_name)
+
     print(f"[summarize_results] Wrote CSV: {csv_path}")
     print(f"[summarize_results] Figures in: {figs_dir}")
     return summary_dir
@@ -1433,17 +1782,16 @@ def plot_district_demographics(
     return written
 
 
-def export_and_plot_one_plan_breakdown(
+def export_one_plan_breakdown(
     district_count: int,
     plan_idx: int = 0,
     *,
     run_name: str,
     csv_path: Optional[Path] = None,
     output_dir: Optional[Path] = None,
-) -> Tuple[Optional[Path], Optional[Path]]:
+) -> Optional[Path]:
     """
-    Export a per-district racial breakdown for one sampled plan, as both a CSV
-    and a 100%-stacked bar chart (one bar per district in that plan).
+    Export a per-district racial breakdown for one sampled plan as a CSV.
 
     District identity isn't comparable across sampled plans (district_id 0 in
     one plan is a different piece of the city than district_id 0 in another),
@@ -1455,32 +1803,31 @@ def export_and_plot_one_plan_breakdown(
         plan_idx: Which sampled plan to show. Defaults to 0 (the first sampled
             plan for that ensemble).
         run_name: The run whose ensemble to read; selects the namespaced source
-            CSV and prefixes the breakdown csv/figure filenames.
+            CSV and prefixes the breakdown csv filename.
         csv_path: Path to the CSV written by export_district_demographics_csv.
             Defaults to
             outputs/cross_run_summaries/<run_name>_district_demographics.csv.
-        output_dir: Where to write the csv/figure. Defaults to
-            outputs/cross_run_summaries (csv) / .../figures (png).
+        output_dir: Where to write the csv. Defaults to
+            outputs/cross_run_summaries.
 
     Outputs:
         outputs/cross_run_summaries/<run_name>_district_breakdown_<n>districts_plan<p>.csv
-        outputs/cross_run_summaries/figures/<run_name>_district_breakdown_<n>districts_plan<p>.png
 
     Returns:
-        (csv_path, fig_path), either None if the requested (district_count,
-        plan_idx) isn't present in the source csv.
+        The csv path, or None if the requested (district_count, plan_idx)
+        isn't present in the source csv.
     """
     if csv_path is None:
         csv_path = _district_demographics_csv_path(run_name)
     if not csv_path.is_file():
         print(f"[summarize_results] {csv_path} not found; run export_district_demographics_csv first.")
-        return None, None
+        return None
 
     df = pd.read_csv(csv_path)
     plan_df = df[(df["district_count"] == district_count) & (df["plan_idx"] == plan_idx)]
     if plan_df.empty:
         print(f"[summarize_results] No rows for district_count={district_count}, plan_idx={plan_idx}.")
-        return None, None
+        return None
 
     plan_df = plan_df.sort_values("district_id")
 
@@ -1488,11 +1835,8 @@ def export_and_plot_one_plan_breakdown(
         base_dir = Path("outputs/cross_run_summaries")
     else:
         base_dir = Path(output_dir)
-    figs_dir = base_dir / "figures"
     base_dir.mkdir(parents=True, exist_ok=True)
-    figs_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- CSV: a tidy, sorted, human-readable per-district table -----------------
     # DISTRICT_DEMOGRAPHIC_GROUPS' col is already the "<group>_share" column;
     # the raw VAP count column is that name with the "_share" suffix stripped.
     share_cols = [col for col, _, _ in DISTRICT_DEMOGRAPHIC_GROUPS]
@@ -1502,43 +1846,4 @@ def export_and_plot_one_plan_breakdown(
     plan_df[summary_cols].to_csv(csv_out_path, index=False)
     print(f"[summarize_results] Wrote per-plan district breakdown CSV: {csv_out_path}")
 
-    # --- Figure: one 100%-stacked horizontal bar per district --------------------
-    n_districts = len(plan_df)
-    fig, ax = plt.subplots(figsize=(8, max(3, n_districts * 0.35 + 1)))
-
-    y = range(n_districts)
-    left = [0.0] * n_districts
-    for col, label, color in DISTRICT_DEMOGRAPHIC_GROUPS:
-        widths = (plan_df[col] * 100).to_numpy()
-        ax.barh(
-            list(y), widths, left=left, color=color, alpha=0.85,
-            edgecolor="white", linewidth=0.5, label=label, height=0.7,
-        )
-        left = [l + w for l, w in zip(left, widths)]
-
-    ax.set_yticks(list(y))
-    ax.set_yticklabels([str(d) for d in plan_df["district_id"]])
-    ax.invert_yaxis()  # district 0 at the top
-    ax.set_xlim(0, 100)
-    ax.set_xlabel("Share of District VAP (%)")
-    ax.set_ylabel("District")
-    ax.set_title(
-        f"District Racial Composition — {district_count}-District Ensemble, Plan {plan_idx}",
-        fontsize=13, fontweight="bold", pad=14,
-    )
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    for spine in ("left", "bottom"):
-        ax.spines[spine].set_linewidth(0.5)
-    ax.tick_params(axis="both", labelsize=9)
-    ax.legend(
-        loc="upper center", bbox_to_anchor=(0.5, -0.08),
-        ncol=4, frameon=False, fontsize=9,
-    )
-
-    fig_out_path = figs_dir / f"{run_name}_district_breakdown_{district_count}districts_plan{plan_idx}.png"
-    fig.savefig(fig_out_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[summarize_results] Wrote: {fig_out_path}")
-
-    return csv_out_path, fig_out_path
+    return csv_out_path

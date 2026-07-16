@@ -1,0 +1,23 @@
+@import url("https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/fonts.css");
+
+body {
+    font-family: "CMU Serif", "Computer Modern Roman", Georgia, serif;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+h1, h2, h3 {
+    font-family: "CMU Serif", "Computer Modern Roman", Georgia, serif;
+    color: #006b9c;
+}
+
+.figure-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.figure-row img {
+    width: 50%;
+    height: auto;
+}

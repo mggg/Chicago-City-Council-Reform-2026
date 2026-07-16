@@ -185,11 +185,12 @@ def has_valid_summaries(config):
     # (see pipeline/simulate_elections.py), and summarize_results draws a bymode
     # + byslate figure per (district-magnitude, method) pair, one
     # bubbles-by-method figure per district-magnitude, and (since the coalition
-    # win-rate boxplots were added) one standalone + one grid coalition boxplot
-    # per district-magnitude (mode fixed to slate_pl, not multiplied by method).
+    # win-rate boxplots were added) one standalone + one available-candidate-only
+    # + one grid coalition boxplot per district-magnitude (mode fixed to
+    # slate_pl, not multiplied by method).
     distinct_magnitudes = len({(d["num_districts"], d["winners"]) for d in config["district_configs"]})
     num_methods = len(config["voting_configs"])
-    expected_figs = distinct_magnitudes * (2 * num_methods + 1 + 2)
+    expected_figs = distinct_magnitudes * (2 * num_methods + 1 + 3)
     actual_figs = sum(1 for _ in figs.glob("*.png"))
     if actual_figs != expected_figs:
         print("Incorrect number of figures.")

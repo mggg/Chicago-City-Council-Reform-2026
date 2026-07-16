@@ -26,6 +26,10 @@ and tallying the seats won by each group's candidates.
 | Asian Bloc Separate – Basic | `asian-seperate-bloc.json` | 10 × 5 | 50 | FastSTV (5 seats) | A, W, B, H | 1.00 / 1.00 / 1.00 / 1.00 |
 | 10 × 3 STV | `10x3-stv.json` | 10 × 3 | 30 | FastSTV (3 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
 | 10 × 5 STV | `10x5-stv.json` | 10 × 5 | 50 | FastSTV (5 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 10 × 5 STV - Larger Asian Districts | `asian_optimized.json` | 10 × 5 | 50 | FastSTV (5 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 50 × 1 IRV | `50-irv.json` | 50 × 1 | 50 | IRV | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 50 × 1 IRV - Larger Asian Districts | `50-irv-asian-optimized.json` | 50 × 1 | 50 | IRV | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 50 × 1 PSMD - Larger Asian Districts | `50-psmd-asian-optimized.json` | 50 × 1 | 50 | Plurality | W-A, B, H | 1.00 / 1.00 / 1.00 |
 
 - **Basic** — roughly the status quo baseline (50 single-member wards, plurality.)
 - **Low POC Turnout** — turnout sensitivity: every other run assumes full turnout
@@ -35,6 +39,15 @@ and tallying the seats won by each group's candidates.
   their own 4th bloc instead of being merged into `W-A`. We are curious to understand how modeling Asian voters as a separate bloc impacts their city council representation if candidates from their preferred slate receive heavier Asian voter support and a modest amount of crossover support from the white voting bloc.
 - **10 × 3 STV** and **10 × 5 STV** — the multi-member STV alternatives (3- and
   5-seat districts).
+- **50 × 1 IRV** — same neutral districting, bloc structure, and turnout as
+  Basic, but elected by Instant-Runoff Voting instead of plurality.
+- **"Larger Asian Districts" runs** (10 × 5 STV, 50 × 1 IRV, and 50 × 1 PSMD
+  variants) — same voter-bloc structure and turnout as their neutral
+  counterparts, but the districting ensemble itself is biased: Gingleator
+  short-burst optimization (`optimize_for_bloc: "A"`) resamples the chain
+  toward plans with more districts above a target Asian-VAP-share threshold
+  (0.15 for the STV variant, 0.20 for the two 50 × 1 variants), instead of the
+  neutral ReCom chain the other runs use.
 
 ## Shared parameters
 
@@ -87,7 +100,7 @@ The cohesion parameters here have been selected based on available estimates (fr
 
 Figures below are from the current pipeline (updated cohesion matrix, full
 turnout except where noted, and per-district proportional candidate counts
-with noise). Five figure types are shown for each completed run: a **by-mode
+with noise). Six figure types are shown for each completed run: a **by-mode
 histogram** (distribution of citywide seats won by Asian-preferred candidates,
 one series per voter model, against the Asian share-of-VAP and combined-support
 reference lines), a **bubble plot** (the same distribution, sized by occurrence
@@ -97,8 +110,11 @@ Black, Latino, Asian — each against its own share-of-VAP and combined-support
 reference lines), a **coalition win-rate boxplot** (districts ranked by the
 focal group's VAP share, low to high, and pooled across sampled plans, with
 each box colored by how often that rank actually elected the group's preferred
-candidate), and a **coalition win-rate grid** (the same design repeated once
-per racial group in a 2×2 layout).
+candidate), the same **coalition win-rate boxplot restricted to districts
+with an available candidate** (excluding districts where the focal slate was
+apportioned zero candidates and so could never win, regardless of VAP share),
+and a **coalition win-rate grid** (the unrestricted design repeated once per
+racial group in a 2×2 layout).
 
 
 ### Basic – 50×1 Plurality
@@ -113,6 +129,8 @@ per racial group in a 2×2 layout).
 <div style="page-break-after: always;"></div>
 
 ![Basic coalition win-rate boxplot](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_A_slate_pl_coalition_boxplot.png)
+
+![Basic coalition win-rate boxplot, districts with an available Asian candidate](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_A_slate_pl_coalition_boxplot_available.png)
 
 ![Basic coalition win-rate grid](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_slate_pl_coalition_boxplot_grid.png)
 
@@ -131,6 +149,8 @@ per racial group in a 2×2 layout).
 
 ![10 X 5 STV coalition win-rate boxplot](../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot.png)
 
+![10 X 5 STV coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot_available.png)
+
 ![10 X 5 STV coalition win-rate grid](../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_slate_pl_coalition_boxplot_grid.png)
 
 <div style="page-break-after: always;"></div>
@@ -147,6 +167,8 @@ per racial group in a 2×2 layout).
 <div style="page-break-after: always;"></div>
 
 ![10 X 3 STV coalition win-rate boxplot](../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot.png)
+
+![10 X 3 STV coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot_available.png)
 
 ![10 X 3 STV coalition win-rate grid](../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_slate_pl_coalition_boxplot_grid.png)
 
@@ -165,6 +187,8 @@ per racial group in a 2×2 layout).
 
 ![Low POC Turnout coalition win-rate boxplot](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot.png)
 
+![Low POC Turnout coalition win-rate boxplot, districts with an available Asian candidate](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot_available.png)
+
 ![Low POC Turnout coalition win-rate grid](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_slate_pl_coalition_boxplot_grid.png)
 
 <div style="page-break-after: always;"></div>
@@ -181,6 +205,8 @@ per racial group in a 2×2 layout).
 <div style="page-break-after: always;"></div>
 
 ![Asian Bloc Separate coalition win-rate boxplot](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x5_A_slate_pl_coalition_boxplot.png)
+
+![Asian Bloc Separate coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x5_A_slate_pl_coalition_boxplot_available.png)
 
 ![Asian Bloc Separate coalition win-rate grid](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x5_slate_pl_coalition_boxplot_grid.png)
 
@@ -203,6 +229,8 @@ ReCom chain the other STV runs use.
 
 ![10 X 5 STV Larger Asian Districts coalition win-rate boxplot](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot.png)
 
+![10 X 5 STV Larger Asian Districts coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot_available.png)
+
 ![10 X 5 STV Larger Asian Districts coalition win-rate grid](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_slate_pl_coalition_boxplot_grid.png)
 
 <div style="page-break-after: always;"></div>
@@ -222,6 +250,8 @@ instead of plurality — otherwise the same setup as Basic.
 <div style="page-break-after: always;"></div>
 
 ![50 X 1 IRV coalition win-rate boxplot](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_A_slate_pl_coalition_boxplot.png)
+
+![50 X 1 IRV coalition win-rate boxplot, districts with an available Asian candidate](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_A_slate_pl_coalition_boxplot_available.png)
 
 ![50 X 1 IRV coalition win-rate grid](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_slate_pl_coalition_boxplot_grid.png)
 
@@ -243,6 +273,8 @@ optimizer applied to the 50-district ensemble (`50-irv-asian-optimized.json`).
 
 ![50 X 1 IRV Larger Asian Districts coalition win-rate boxplot](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png)
 
+![50 X 1 IRV Larger Asian Districts coalition win-rate boxplot, districts with an available Asian candidate](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot_available.png)
+
 ![50 X 1 IRV Larger Asian Districts coalition win-rate grid](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_slate_pl_coalition_boxplot_grid.png)
 
 <div style="page-break-after: always;"></div>
@@ -263,6 +295,8 @@ to the IRV-optimized run above.
 <div style="page-break-after: always;"></div>
 
 ![50 X 1 PSMD Larger Asian Districts coalition win-rate boxplot](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png)
+
+![50 X 1 PSMD Larger Asian Districts coalition win-rate boxplot, districts with an available Asian candidate](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot_available.png)
 
 ![50 X 1 PSMD Larger Asian Districts coalition win-rate grid](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_slate_pl_coalition_boxplot_grid.png)
 

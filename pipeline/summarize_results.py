@@ -1000,7 +1000,7 @@ def _plot_bubbles_for_config(
 # the win-rate gradient.
 
 COALITION_BASE_COLOR = "#1a7a3c"  # green, independent of MODE_COLORS (5.39:1)
-COALITION_NO_WINNER_COLOR = "#c70000"
+COALITION_NO_WINNER_COLOR = "#000000"
 COALITION_BOX_EDGE = "#52514e"
 
 
@@ -1037,6 +1037,34 @@ def _load_district_vap_shares(config, district_count: int) -> pd.DataFrame:
             group_vap = settings_data.get(col)
             row[group] = (group_vap / total_vap) if total_vap else 0.0
         rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _load_district_candidate_availability(config, district_count: int, slate: str) -> pd.DataFrame:
+    """
+    Per-(plan, district) whether `slate` had at least one candidate on the
+    ballot, read straight from that district's settings file. A slate
+    reapportioned zero candidates for a given district is dropped from that
+    district's slate_to_candidates entirely (see
+    pipeline/settings_generator.py), so its absence there is the signal.
+
+    Returns:
+        DataFrame with columns "plan", "district_id", "has_candidate" (bool).
+        Empty if the run has no settings files yet for this district_count.
+    """
+    run_name = str(config["run_name"])
+    settings_dir = Path("outputs") / run_name / "settings" / str(district_count)
+    if not settings_dir.is_dir():
+        return pd.DataFrame()
+
+    rows: List[Dict[str, Any]] = []
+    for settings_path in sorted(settings_dir.glob("*.json")):
+        plan, district, _ = parse_plan_district_rep_from_path(settings_path.name)
+        if plan is None or district is None:
+            continue
+        settings_data = load_json(settings_path)
+        candidates = settings_data.get("slate_to_candidates", {}).get(slate, [])
+        rows.append({"plan": plan, "district_id": district, "has_candidate": bool(candidates)})
     return pd.DataFrame(rows)
 
 
@@ -1110,12 +1138,17 @@ def _draw_coalition_boxplot(
             "markerfacecolor": "#898781", "markeredgecolor": "none", "alpha": 0.5,
         },
     )
-    for patch, r in zip(bp["boxes"], ranks):
+    for patch, median, r in zip(bp["boxes"], bp["medians"], ranks):
         rate = win_rate_by_rank.get(r, 0.0)
-        color = COALITION_NO_WINNER_COLOR if rate <= 0 else cmap(norm(rate))
+        no_winner = rate <= 0
+        color = COALITION_NO_WINNER_COLOR if no_winner else cmap(norm(rate))
         patch.set_facecolor(color)
         patch.set_edgecolor(COALITION_BOX_EDGE)
         patch.set_linewidth(0.9 if not small else 0.6)
+        # The default near-black median line would be invisible against a
+        # solid-black no-winner box, so it's swapped to white there only.
+        if no_winner:
+            median.set_color("#ffffff")
 
     overall_mean = float(np.mean(np.concatenate(data)))
     mean_line = ax.axhline(
@@ -1234,6 +1267,82 @@ def plot_coalition_boxplot(
         _add_win_rate_colorbar(fig, (0.07, 0.855, 0.16, 0.015), win_rate_by_rank)
 
         fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot.png"
+        fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"[summarize_results] Wrote: {fig_path}")
+
+
+def plot_coalition_boxplot_available(
+    df: pd.DataFrame, config, figs_dir: Path, run_name: str, mode: str = "slate_pl",
+) -> None:
+    """
+    Same design as plot_coalition_boxplot, but restricted to (plan, district)
+    instances where the focal slate actually had a candidate on the ballot.
+    A district a slate was apportioned zero candidates in could never elect
+    that slate structurally, regardless of VAP share, so including it in the
+    unfiltered plot dilutes the low ranks with districts that were never
+    contestable in the first place; this variant ranks and pools only the
+    subset that was.
+
+    Outputs:
+        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<slate>_<mode>_coalition_boxplot_available.png
+    """
+    focal_slates = [
+        s for s in get_focal_slates(config)
+        if s in DEFAULT_GROUP_VAP_COLUMNS or s in config.get("group_vap_columns", {})
+    ]
+    if not focal_slates:
+        print(
+            f"[summarize_results] focal_group {config['focal_group']!r} has no VAP-column "
+            "mapping; skipping available-candidate coalition boxplot."
+        )
+        return
+    slate = focal_slates[0]
+
+    df_mode = df[df["mode"] == mode]
+    if df_mode.empty:
+        print(f"[summarize_results] No rows for mode={mode!r}; skipping available-candidate coalition boxplot.")
+        return
+
+    for (num_dist, seats_per_district), district_df in df_mode.groupby(["num_districts", "seats_per_district"]):
+        vap_df = _load_district_vap_shares(config, int(num_dist))
+        availability_df = _load_district_candidate_availability(config, int(num_dist), slate)
+        if availability_df.empty:
+            print(
+                f"[summarize_results] No candidate-availability data for slate={slate!r}, "
+                f"{num_dist}x{seats_per_district}; skipping available-candidate coalition boxplot."
+            )
+            continue
+
+        available_pairs = availability_df.loc[availability_df["has_candidate"], ["plan", "district_id"]]
+        vap_df_available = vap_df.merge(available_pairs, on=["plan", "district_id"], how="inner")
+
+        data_by_rank, win_rate_by_rank = _rank_boxplot_data(district_df, vap_df_available, slate)
+        if not data_by_rank:
+            print(
+                f"[summarize_results] No VAP-share/winner data for slate={slate!r}, "
+                f"{num_dist}x{seats_per_district} (available-candidate filter); skipping."
+            )
+            continue
+
+        fig = plt.figure(figsize=(max(10.0, len(data_by_rank) * 0.35), 7))
+        ax = fig.add_axes((0.07, 0.1, 0.88, 0.72))
+        _draw_coalition_boxplot(ax, data_by_rank, win_rate_by_rank, _group_label(slate))
+        ax.set_title("")  # title lives on the figure instead, to match the header layout below
+
+        fig.suptitle(
+            f"{_group_label(slate)} Coalition Percent of District VAP in {num_dist} District Plans",
+            fontsize=15, fontweight="bold", y=0.97,
+        )
+        fig.text(
+            0.5, 0.9,
+            f"{run_name} - {MODEL_NAMES.get(mode, mode)} Model "
+            f"(Districts with an Available {_group_label(slate)} Candidate)",
+            ha="center", va="bottom", fontsize=10, color="#52514e", style="italic",
+        )
+        _add_win_rate_colorbar(fig, (0.07, 0.855, 0.16, 0.015), win_rate_by_rank)
+
+        fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot_available.png"
         fig.savefig(fig_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
         print(f"[summarize_results] Wrote: {fig_path}")
@@ -1557,6 +1666,7 @@ def summarize_results(config) -> Path:
     # Coalition win-rate boxplots (district-level, not plan-aggregated -- these
     # need per-district VAP share, so they use `df` rather than `df_plan`).
     plot_coalition_boxplot(df, config, figs_dir, run_name)
+    plot_coalition_boxplot_available(df, config, figs_dir, run_name)
     plot_coalition_boxplot_grid(df, config, figs_dir, run_name)
 
     print(f"[summarize_results] Wrote CSV: {csv_path}")

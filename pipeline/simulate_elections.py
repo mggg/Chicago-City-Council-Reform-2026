@@ -16,9 +16,10 @@ import time
 from pathlib import Path
 from joblib import Parallel, delayed
 from votekit import RankProfile, ScoreProfile, elections
-from typing import List, Iterable, Any, Optional, get_args
+from votekit.utils import first_place_votes
+from typing import List, Iterable, Any, Dict, Optional, Tuple, get_args
 from dataclasses import dataclass
-from pipeline.utils.helpers import get_voter_models
+from pipeline.utils.helpers import get_voter_models, is_focal_candidate
 
 
 
@@ -140,15 +141,43 @@ def _load_profile_from_zip(zip_path: str | Path, member_name: str, profile_class
         os.remove(temp_path)
 
 
+def _fpv_share_from_profile(profile: RankProfile, slate_to_candidates: Dict[str, List[str]]) -> Dict[str, float]:
+    """
+    Each candidate slate's share of a RankProfile's (weighted) first-place votes.
+
+    Computed here (while the profile is already loaded to run elections) rather
+    than by re-opening profiles.zip later in summarize_results, which is what
+    made the coalition boxplots' first-place-vote-share coloring slow.
+
+    Returns:
+        Dict mapping each slate in slate_to_candidates to its share (0-1) of
+        this profile's total first-place votes. All-zero if the profile has no
+        cast ballots.
+    """
+    fpv = first_place_votes(profile)
+    total = sum(fpv.values())
+    if total <= 0:
+        return {slate: 0.0 for slate in slate_to_candidates}
+    return {
+        slate: sum(
+            weight for candidate, weight in fpv.items()
+            if is_focal_candidate(str(candidate), slate, slate_to_candidates)
+        ) / total
+        for slate in slate_to_candidates
+    }
+
+
 def _process_profile(
     zip_path: str | Path,
     member_name: str,
     election_plan: List[tuple],
     voting_configs: dict,
-) -> dict:
+    slate_to_candidates: Dict[str, List[str]],
+) -> Tuple[dict, Dict[str, float]]:
     """
-    Load a voter profile csv from the run's profiles.zip and run each configured
-    election to determine winners.
+    Load a voter profile csv from the run's profiles.zip, run each configured
+    election to determine winners, and compute each slate's first-place-vote
+    share from the same loaded profile.
 
     Args:
         zip_path: Path to the run's profiles.zip archive.
@@ -156,9 +185,14 @@ def _process_profile(
         election_plan: Precomputed (rule, election_class, profile_class) tuples
             from _build_election_plan; avoids per-file class lookup/introspection.
         voting_configs: Election and voting settings specified in configuration files.
+        slate_to_candidates: Mapping from slate label to its candidate ids, used
+            to aggregate first-place votes by slate.
 
     Returns:
-        {[type]: [winner_ids]} e.g. { "stv": ["A2", "B1", "B3"] }
+        (election_results, fpv_share):
+            election_results: {[type]: [winner_ids]} e.g. { "stv": ["A2", "B1", "B3"] }
+            fpv_share: {slate: share}, from _fpv_share_from_profile -- empty if
+                no rule in election_plan uses a RankProfile.
 
     TO-DO: Figure out how to use RankProfile OR ScoreProfile for BlockPlurality if desired.
         Current default is RankProfile.
@@ -183,7 +217,10 @@ def _process_profile(
         elected = election_class(profile, **voting_configs[rule]).get_elected()
         results[rule] = _candidate_list_from_elected(elected)
 
-    return results
+    rank_profile = profile_cache.get(RankProfile)
+    fpv_share = _fpv_share_from_profile(rank_profile, slate_to_candidates) if rank_profile is not None else {}
+
+    return results, fpv_share
 
 def _parse_district_configs(raw: Any) -> List[DistrictConfig]:
     """
@@ -234,10 +271,11 @@ def simulate_elections(config, modes: Optional[List[str]] = None) -> None:
         One json file per (mode, district_count, winners) combination at
         outputs/election_results/<run_name>_election_results/<mode>/
         <run_name>_<n>_districts_<w>_winners_for_voter_mode_<mode>.json.
-        Each file contains a "election_results" list where each entry corresponds
-        to one profile file:
-          - multi-seat: {"stv": [...]}
-          - single-seat: {"plurality": [...], "irv": [...]}
+        Each file contains "election_results" and "first_place_vote_shares"
+        lists, index-aligned with "profile_files" (entry i of each corresponds
+        to profile_files[i]):
+          - election_results: {"stv": [...]} or {"plurality": [...], "irv": [...]}
+          - first_place_vote_shares: {slate: share}, e.g. {"W": 0.4, "B": 0.3, ...}
 
     Returns:
         None.
@@ -278,17 +316,27 @@ def simulate_elections(config, modes: Optional[List[str]] = None) -> None:
             else:
                 ctx = None
 
+            slate_to_candidates = config.get("slate_to_candidates", {})
             if ctx is not None:
                 with ctx:
-                    results_list = Parallel(n_jobs=n_jobs)(
-                        delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                    processed = Parallel(n_jobs=n_jobs)(
+                        delayed(_process_profile)(
+                            zip_path, pf, election_plan, config["voting_configs"], slate_to_candidates,
+                        )
+                        for pf in all_profile_files
                     )
 
             else:
                 print(f"[simulate_elections] {desc} (no joblib_progress installed)")
-                results_list = Parallel(n_jobs=n_jobs)(
-                    delayed(_process_profile)(zip_path, pf, election_plan, config["voting_configs"]) for pf in all_profile_files
+                processed = Parallel(n_jobs=n_jobs)(
+                    delayed(_process_profile)(
+                        zip_path, pf, election_plan, config["voting_configs"], slate_to_candidates,
+                    )
+                    for pf in all_profile_files
                 )
+
+            results_list = [election_results for election_results, _ in processed]
+            fpv_share_list = [fpv_share for _, fpv_share in processed]
 
             # write all winners for this district/mode combo to one json file
             out_path = output_dir / (
@@ -303,6 +351,7 @@ def simulate_elections(config, modes: Optional[List[str]] = None) -> None:
                         "winners_per_district": dc.winners,
                         "profile_files": all_profile_files,
                         "election_results": results_list,
+                        "first_place_vote_shares": fpv_share_list,
                     },
                     f,
                     indent=2,

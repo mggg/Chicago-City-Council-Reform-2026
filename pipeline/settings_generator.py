@@ -28,14 +28,6 @@ DEFAULT_GROUP_VAP_COLUMNS = {
     "A": "asian_nhpi_vap_20",
 }
 
-# Calibration for the per-district candidate-count draw (see _sample_candidate_count):
-# a typical 50-district plan's ~44,000-VAP district should reproduce the previous
-# fixed p=0.3 geometric baseline (E[candidates]=3.33, matching 2023's real citywide
-# average of ~3.48 candidates/ward). Districts with more VAP per seat (e.g. 10-district
-# plans, ~220,000 VAP) get a proportionally larger expected candidate count.
-_CANDIDATE_COUNT_CALIBRATION_VAP = 44_025
-_CANDIDATE_COUNT_CALIBRATION_EXPECTED = 1 / 0.3
-CANDIDATE_COUNT_LOG_VAP_OFFSET = math.log(_CANDIDATE_COUNT_CALIBRATION_VAP) - _CANDIDATE_COUNT_CALIBRATION_EXPECTED
 
 def get_bloc_definitions(config):
     """
@@ -327,6 +319,13 @@ def generate_settings(config):
     """
     random.seed(config["seed"])
 
+    if "candidate_geometric_p" not in config:
+        raise ValueError(
+            "'candidate_geometric_p' must be set in the config -- it's the success "
+            "probability for the per-district candidate-count draw (e.g. 0.2 for "
+            "50-district plans, 0.1 for 10-district plans)."
+        )
+
     bloc_definitions = get_bloc_definitions(config)
     _validate_bloc_config(config, bloc_definitions)
     # The demographic groups we need VAP for are the union across all blocs.
@@ -379,17 +378,15 @@ def generate_settings(config):
                     district = row.name
                     district_settings = _build_district_settings(row, config, group_columns, bloc_definitions)
 
-                    # Both the ceiling and the expected value of the candidate-count draw
-                    # scale with this district's VAP (see CANDIDATE_COUNT_LOG_VAP_OFFSET):
-                    # candidate_max is the log-scale ceiling, and the geometric
-                    # distribution's success probability is derived from that same
-                    # log(VAP) value, so larger districts (e.g. 10-district plans) draw
-                    # from a distribution with a larger expected candidate count than
-                    # smaller ones (e.g. 50-district plans), not just a higher ceiling.
-                    log_vap = math.log(district_settings[config["population_vap_column"]])
-                    candidate_max = math.ceil(log_vap)
-                    expected_candidates = max(1.0, log_vap - CANDIDATE_COUNT_LOG_VAP_OFFSET)
-                    candidate_count = min(np.random.geometric(1 / expected_candidates), candidate_max)
+                    # candidate_max is a log-scale ceiling on this district's VAP;
+                    # the geometric distribution's success probability is a fixed,
+                    # per-config value (candidate_geometric_p) rather than derived
+                    # from VAP, so different district-magnitude configs can be
+                    # tuned independently (e.g. a lower p, and so a larger expected
+                    # candidate count, for 10-district plans than 50-district ones).
+                    vap = district_settings[config["population_vap_column"]]
+                    candidate_max = math.ceil(math.log(vap))
+                    candidate_count = min(np.random.geometric(config["candidate_geometric_p"]), candidate_max)
 
                     slate_to_candidates = _build_slate_to_candidates(
                         row, slate_columns, candidate_count

@@ -21,7 +21,7 @@
   "optimize_threshold": 0.20,
   "burst_length": 100,
 
-  "average_candidates": 6,
+  "candidate_geometric_p": 0.2,
 
   "epsilon": 0.05,
 

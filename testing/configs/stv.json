@@ -17,6 +17,8 @@
 
   "total_seats": 50,
 
+  "candidate_geometric_p": 0.1,
+
   "epsilon": 0.05,
 
   "voting_configs": {

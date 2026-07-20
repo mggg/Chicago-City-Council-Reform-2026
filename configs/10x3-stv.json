@@ -17,7 +17,7 @@
 
   "total_seats": 30,
 
-  "average_candidates": 12,
+  "candidate_geometric_p": 0.1,
 
   "epsilon": 0.05,
 

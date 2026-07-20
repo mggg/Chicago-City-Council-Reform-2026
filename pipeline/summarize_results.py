@@ -361,6 +361,14 @@ def _rows_from_results_file(
             f"{len(election_results)=} vs {len(profile_files)=}"
         )
 
+    # first_place_vote_shares[i] is {slate: share} for the i-th profile, computed
+    # by simulate_elections while that profile was already loaded. Older results
+    # files predate this field; fpv_shares.get(slate) then yields None (-> NaN in
+    # the summary table) rather than raising, so those runs still summarize --
+    # they just have no first-place-vote-share data until re-simulated.
+    first_place_vote_shares: List[Dict[str, float]] = data.get("first_place_vote_shares", [])
+    has_fpv_shares = len(first_place_vote_shares) == len(profile_files)
+
     rows: List[Dict[str, Any]] = []
     # --- One row per simulated profile (and per election method) ----
     for idx, result in enumerate(election_results):
@@ -369,10 +377,13 @@ def _rows_from_results_file(
         plan, district, rep = parse_plan_district_rep_from_path(profile_files[idx])
 
         total_vap, total_ivap = _district_population(settings_dir, config, plan, district)
+        fpv_shares = first_place_vote_shares[idx] if has_fpv_shares else {}
 
         # A single profile may be scored under several methods (e.g. a
         # single-winner district under Plurality and IRV), so we emit one
-        # row per method, each with its own focal-seat count.
+        # row per method, each with its own focal-seat count. fpv_shares is a
+        # property of the profile, not the method, so it's the same across
+        # every method-row for this idx.
         for method_key, winners in result.items():
             focal_seats = sum(
                 count_focal_winners(winners, s, slate_to_candidates)
@@ -394,9 +405,11 @@ def _rows_from_results_file(
                 config["pop_of_interest_column"]: total_ivap,
                 "combined_support": i_cs_turnout,
             }
-            # Per-slate seat counts feed the by-slate representation panel.
+            # Per-slate seat counts feed the by-slate representation panel;
+            # per-slate fpv share feeds the coalition boxplots' fpv_share coloring.
             for slate in slate_to_candidates:
                 row[f"seats_{slate}"] = count_focal_winners(winners, slate, slate_to_candidates)
+                row[f"{slate}_fpv_share"] = fpv_shares.get(slate)
             rows.append(row)
 
     return rows
@@ -1068,8 +1081,45 @@ def _load_district_candidate_availability(config, district_count: int, slate: st
     return pd.DataFrame(rows)
 
 
+def _rank_districts(
+    vap_df: pd.DataFrame, group: str, *, restrict_to: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
+    """
+    Rank each plan's districts by `group`'s VAP share (ascending, 1 = lowest).
+
+    Shared by _rank_boxplot_data (win-rate coloring) and _rank_fpv_color_data
+    (first-place-vote-share coloring) so both color the same set of ranks the
+    same way.
+
+    Args:
+        vap_df: Output of _load_district_vap_shares for some district_count.
+            Ranking always uses every row here, even when restrict_to is given,
+            so a district's rank reflects its position among all of that plan's
+            districts, not just the ones that end up plotted.
+        group: Demographic group / candidate slate label (e.g. "A").
+        restrict_to: Optional DataFrame with "plan"/"district_id" columns. If
+            given, rows outside this set are dropped *after* ranking (e.g. only
+            districts with an available candidate), so a rank number means the
+            same district position whether or not restrict_to is used -- some
+            low ranks may simply be missing rather than the rest compressing
+            down to fill the gap.
+
+    Returns:
+        vap_df with an added "vap_rank" column, optionally filtered to
+        restrict_to's (plan, district_id) pairs.
+    """
+    vap_ranked = vap_df.copy()
+    vap_ranked["vap_rank"] = vap_ranked.groupby("plan")[group].rank(method="first").astype(int)
+    if restrict_to is not None:
+        vap_ranked = vap_ranked.merge(
+            restrict_to[["plan", "district_id"]], on=["plan", "district_id"], how="inner",
+        )
+    return vap_ranked
+
+
 def _rank_boxplot_data(
     district_df: pd.DataFrame, vap_df: pd.DataFrame, group: str,
+    *, restrict_to: Optional[pd.DataFrame] = None,
 ) -> Tuple[Dict[int, Any], pd.Series]:
     """
     Rank each plan's districts by `group`'s VAP share (ascending), pool across
@@ -1081,6 +1131,7 @@ def _rank_boxplot_data(
             and "seats_<group>" columns.
         vap_df: Output of _load_district_vap_shares for the same district_count.
         group: Demographic group / candidate slate label (e.g. "A").
+        restrict_to: See _rank_districts.
 
     Returns:
         (data_by_rank, win_rate_by_rank): data_by_rank maps each rank (1 = lowest
@@ -1092,8 +1143,7 @@ def _rank_boxplot_data(
     if group not in vap_df.columns or seat_col not in district_df.columns:
         return {}, pd.Series(dtype=float)
 
-    vap_ranked = vap_df.copy()
-    vap_ranked["vap_rank"] = vap_ranked.groupby("plan")[group].rank(method="first").astype(int)
+    vap_ranked = _rank_districts(vap_df, group, restrict_to=restrict_to)
 
     merged = district_df[["plan", "district_id", seat_col]].merge(
         vap_ranked[["plan", "district_id", "vap_rank"]], on=["plan", "district_id"], how="inner",
@@ -1109,16 +1159,74 @@ def _rank_boxplot_data(
     return data_by_rank, win_rate_by_rank
 
 
+def _rank_fpv_color_data(
+    district_df: pd.DataFrame, vap_df: pd.DataFrame, group: str,
+    *, restrict_to: Optional[pd.DataFrame] = None,
+) -> pd.Series:
+    """
+    Average first-place-vote share for `group`'s candidates, pooled by the same
+    VAP-share rank _rank_boxplot_data uses, so the two can color the same boxes.
+
+    Args:
+        district_df: District-level rows for one (num_districts, seats_per_district,
+            mode) slice of the summary table -- must have "plan", "district_id",
+            and "<group>_fpv_share" columns. That column comes from
+            build_summary_dataframe, itself populated from simulate_elections's
+            "first_place_vote_shares" field (computed once, while the profile
+            was already loaded to run elections -- see pipeline/simulate_elections.py).
+        vap_df: Output of _load_district_vap_shares for the same district_count
+            (used only for ranking).
+        group: Candidate slate label (e.g. "A").
+        restrict_to: See _rank_districts.
+
+    Returns:
+        Series indexed by vap_rank, values are that rank's mean first-place-vote
+        share (0-100). Empty if district_df has no fpv data for this slate (e.g.
+        its election_results predate the first_place_vote_shares field and need
+        re-simulating).
+    """
+    col = f"{group}_fpv_share"
+    if col not in district_df.columns or district_df[col].isna().all():
+        return pd.Series(dtype=float)
+
+    vap_ranked = _rank_districts(vap_df, group, restrict_to=restrict_to)
+    merged = district_df[["plan", "district_id", col]].merge(
+        vap_ranked[["plan", "district_id", "vap_rank"]], on=["plan", "district_id"], how="inner",
+    )
+    if merged.empty:
+        return pd.Series(dtype=float)
+    return merged.groupby("vap_rank")[col].mean() * 100
+
+
+# Per-color-metric wording for the coalition boxplots: colorbar label, the
+# legend/zero-case label for boxes with no signal at all, and the filename
+# suffix that distinguishes the two variants on disk.
+COALITION_COLOR_METRICS = {
+    "win_rate": {
+        "colorbar_label": "Win Rate",
+        "zero_case_label": lambda group_label: f"No {group_label} winner at this rank",
+        "filename_suffix": "",
+    },
+    "fpv_share": {
+        "colorbar_label": "Avg. First-Place Vote Share",
+        "zero_case_label": lambda group_label: f"No {group_label} first-place votes at this rank",
+        "filename_suffix": "_fpv_share",
+    },
+}
+
+
 def _draw_coalition_boxplot(
-    ax, data_by_rank: Dict[int, Any], win_rate_by_rank: pd.Series, group_label: str,
-    *, tick_step: int = 1, small: bool = False,
+    ax, data_by_rank: Dict[int, Any], color_by_rank: pd.Series, group_label: str,
+    *, tick_step: int = 1, small: bool = False, zero_case_label: Optional[str] = None,
 ) -> None:
     """Draw one rank-based coalition boxplot onto `ax` (shared by the standalone
-    and grid figures below)."""
+    and grid figures below). color_by_rank is whatever per-rank 0-100 scalar
+    should set box color (win rate or average first-place-vote share)."""
     ranks = sorted(data_by_rank.keys())
     data = [data_by_rank[r] for r in ranks]
+    zero_case_label = zero_case_label or f"No {group_label} winner at this rank"
 
-    nonzero_rates = win_rate_by_rank[win_rate_by_rank > 0]
+    nonzero_rates = color_by_rank[color_by_rank > 0]
     cmap = mcolors.LinearSegmentedColormap.from_list("winrate", ["#ffffff", COALITION_BASE_COLOR])
     if nonzero_rates.empty:
         norm = mcolors.Normalize(vmin=0, vmax=1)
@@ -1139,15 +1247,15 @@ def _draw_coalition_boxplot(
         },
     )
     for patch, median, r in zip(bp["boxes"], bp["medians"], ranks):
-        rate = win_rate_by_rank.get(r, 0.0)
-        no_winner = rate <= 0
-        color = COALITION_NO_WINNER_COLOR if no_winner else cmap(norm(rate))
+        rate = color_by_rank.get(r, 0.0)
+        no_signal = rate <= 0
+        color = COALITION_NO_WINNER_COLOR if no_signal else cmap(norm(rate))
         patch.set_facecolor(color)
         patch.set_edgecolor(COALITION_BOX_EDGE)
         patch.set_linewidth(0.9 if not small else 0.6)
         # The default near-black median line would be invisible against a
-        # solid-black no-winner box, so it's swapped to white there only.
-        if no_winner:
+        # solid-black no-signal box, so it's swapped to white there only.
+        if no_signal:
             median.set_color("#ffffff")
 
     overall_mean = float(np.mean(np.concatenate(data)))
@@ -1157,11 +1265,11 @@ def _draw_coalition_boxplot(
     )
     legend_fontsize = 6 if small else 8
     if not small:
-        no_winner_patch = Patch(
+        no_signal_patch = Patch(
             facecolor=COALITION_NO_WINNER_COLOR, edgecolor=COALITION_BOX_EDGE,
-            label=f"No {group_label} winner at this rank",
+            label=zero_case_label,
         )
-        ax.legend(handles=[mean_line, no_winner_patch], loc="upper left", fontsize=legend_fontsize, frameon=True)
+        ax.legend(handles=[mean_line, no_signal_patch], loc="upper left", fontsize=legend_fontsize, frameon=True)
     else:
         ax.legend(handles=[mean_line], loc="upper left", fontsize=legend_fontsize, frameon=True)
 
@@ -1183,10 +1291,13 @@ def _draw_coalition_boxplot(
         ax.set_title(group_label, fontsize=10, fontweight="bold")
 
 
-def _add_win_rate_colorbar(fig, rect: Tuple[float, float, float, float], win_rate_by_rank: pd.Series) -> None:
-    """Isolated horizontal win-rate legend at figure coordinates `rect`, labeled
-    only at the two extreme nonzero win rates."""
-    nonzero_rates = win_rate_by_rank[win_rate_by_rank > 0]
+def _add_coalition_colorbar(
+    fig, rect: Tuple[float, float, float, float], color_by_rank: pd.Series,
+    *, label: str = "Win Rate",
+) -> None:
+    """Isolated horizontal colorbar legend at figure coordinates `rect`, labeled
+    only at the two extreme nonzero values of color_by_rank."""
+    nonzero_rates = color_by_rank[color_by_rank > 0]
     if nonzero_rates.empty:
         return
     cmap = mcolors.LinearSegmentedColormap.from_list("winrate", ["#ffffff", COALITION_BASE_COLOR])
@@ -1195,7 +1306,7 @@ def _add_win_rate_colorbar(fig, rect: Tuple[float, float, float, float], win_rat
     cbar_ax = fig.add_axes(rect)
     cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
     cbar.set_ticks([nonzero_rates.min(), nonzero_rates.max()])
-    cbar.set_label("Win Rate", fontsize=8)
+    cbar.set_label(label, fontsize=8)
     cbar.ax.xaxis.set_label_position("top")
     cbar.set_ticklabels([f"{nonzero_rates.min():.0f}%", f"{nonzero_rates.max():.0f}%"])
     cbar.ax.tick_params(labelsize=7, length=0)
@@ -1204,6 +1315,7 @@ def _add_win_rate_colorbar(fig, rect: Tuple[float, float, float, float], win_rat
 
 def plot_coalition_boxplot(
     df: pd.DataFrame, config, figs_dir: Path, run_name: str, mode: str = "slate_pl",
+    *, color_by: str = "win_rate",
 ) -> None:
     """
     One rank-based coalition boxplot per (num_districts, seats_per_district)
@@ -1216,13 +1328,18 @@ def plot_coalition_boxplot(
         config: Parsed config dict.
         figs_dir: Where to write the figure(s).
         run_name: This run's name (used in the filename/title).
-        mode: Which voter model's winners to use -- win rate is a single scalar
-            per rank, so mixing voter models (which can behave very differently,
-            see notebooks/explanations.ipynb section 6) isn't meaningful; defaults
-            to "slate_pl" since that's the model this design was validated against.
+        mode: Which voter model's winners/profiles to use -- the color metric is
+            a single scalar per rank, so mixing voter models (which can behave
+            very differently, see notebooks/explanations.ipynb section 6) isn't
+            meaningful; defaults to "slate_pl" since that's the model this
+            design was validated against.
+        color_by: "win_rate" (default, fraction of instances at that rank where
+            the slate won a seat) or "fpv_share" (average share of first-place
+            votes the slate's candidates received, from the actual generated
+            ballots) -- see COALITION_COLOR_METRICS.
 
     Outputs:
-        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<slate>_<mode>_coalition_boxplot.png
+        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<slate>_<mode>_coalition_boxplot[_fpv_share].png
     """
     focal_slates = [
         s for s in get_focal_slates(config)
@@ -1235,6 +1352,7 @@ def plot_coalition_boxplot(
         )
         return
     slate = focal_slates[0]
+    metric = COALITION_COLOR_METRICS[color_by]
 
     df_mode = df[df["mode"] == mode]
     if df_mode.empty:
@@ -1251,9 +1369,17 @@ def plot_coalition_boxplot(
             )
             continue
 
+        if color_by == "fpv_share":
+            color_by_rank = _rank_fpv_color_data(district_df, vap_df, slate)
+        else:
+            color_by_rank = win_rate_by_rank
+
         fig = plt.figure(figsize=(max(10.0, len(data_by_rank) * 0.35), 7))
         ax = fig.add_axes((0.07, 0.1, 0.88, 0.72))
-        _draw_coalition_boxplot(ax, data_by_rank, win_rate_by_rank, _group_label(slate))
+        _draw_coalition_boxplot(
+            ax, data_by_rank, color_by_rank, _group_label(slate),
+            zero_case_label=metric["zero_case_label"](_group_label(slate)),
+        )
         ax.set_title("")  # title lives on the figure instead, to match the header layout below
 
         fig.suptitle(
@@ -1264,9 +1390,12 @@ def plot_coalition_boxplot(
             0.5, 0.9, f"{run_name} - {MODEL_NAMES.get(mode, mode)} Model",
             ha="center", va="bottom", fontsize=11, color="#52514e", style="italic",
         )
-        _add_win_rate_colorbar(fig, (0.07, 0.855, 0.16, 0.015), win_rate_by_rank)
+        _add_coalition_colorbar(fig, (0.07, 0.855, 0.16, 0.015), color_by_rank, label=metric["colorbar_label"])
 
-        fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot.png"
+        fig_path = (
+            figs_dir
+            / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot{metric['filename_suffix']}.png"
+        )
         fig.savefig(fig_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
         print(f"[summarize_results] Wrote: {fig_path}")
@@ -1274,6 +1403,7 @@ def plot_coalition_boxplot(
 
 def plot_coalition_boxplot_available(
     df: pd.DataFrame, config, figs_dir: Path, run_name: str, mode: str = "slate_pl",
+    *, color_by: str = "win_rate",
 ) -> None:
     """
     Same design as plot_coalition_boxplot, but restricted to (plan, district)
@@ -1281,11 +1411,17 @@ def plot_coalition_boxplot_available(
     A district a slate was apportioned zero candidates in could never elect
     that slate structurally, regardless of VAP share, so including it in the
     unfiltered plot dilutes the low ranks with districts that were never
-    contestable in the first place; this variant ranks and pools only the
-    subset that was.
+    contestable in the first place; this variant pools only the subset that
+    was. Ranking still happens against every district in the plan first (see
+    _rank_boxplot_data's restrict_to), so a rank number here means the same
+    district position as in the unfiltered plot -- some low ranks may simply
+    be missing rather than every remaining rank shifting down to fill the gap.
+
+    Args:
+        color_by: See plot_coalition_boxplot.
 
     Outputs:
-        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<slate>_<mode>_coalition_boxplot_available.png
+        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<slate>_<mode>_coalition_boxplot_available[_fpv_share].png
     """
     focal_slates = [
         s for s in get_focal_slates(config)
@@ -1298,6 +1434,7 @@ def plot_coalition_boxplot_available(
         )
         return
     slate = focal_slates[0]
+    metric = COALITION_COLOR_METRICS[color_by]
 
     df_mode = df[df["mode"] == mode]
     if df_mode.empty:
@@ -1315,9 +1452,10 @@ def plot_coalition_boxplot_available(
             continue
 
         available_pairs = availability_df.loc[availability_df["has_candidate"], ["plan", "district_id"]]
-        vap_df_available = vap_df.merge(available_pairs, on=["plan", "district_id"], how="inner")
 
-        data_by_rank, win_rate_by_rank = _rank_boxplot_data(district_df, vap_df_available, slate)
+        data_by_rank, win_rate_by_rank = _rank_boxplot_data(
+            district_df, vap_df, slate, restrict_to=available_pairs,
+        )
         if not data_by_rank:
             print(
                 f"[summarize_results] No VAP-share/winner data for slate={slate!r}, "
@@ -1325,9 +1463,17 @@ def plot_coalition_boxplot_available(
             )
             continue
 
+        if color_by == "fpv_share":
+            color_by_rank = _rank_fpv_color_data(district_df, vap_df, slate, restrict_to=available_pairs)
+        else:
+            color_by_rank = win_rate_by_rank
+
         fig = plt.figure(figsize=(max(10.0, len(data_by_rank) * 0.35), 7))
         ax = fig.add_axes((0.07, 0.1, 0.88, 0.72))
-        _draw_coalition_boxplot(ax, data_by_rank, win_rate_by_rank, _group_label(slate))
+        _draw_coalition_boxplot(
+            ax, data_by_rank, color_by_rank, _group_label(slate),
+            zero_case_label=metric["zero_case_label"](_group_label(slate)),
+        )
         ax.set_title("")  # title lives on the figure instead, to match the header layout below
 
         fig.suptitle(
@@ -1340,9 +1486,12 @@ def plot_coalition_boxplot_available(
             f"(Districts with an Available {_group_label(slate)} Candidate)",
             ha="center", va="bottom", fontsize=10, color="#52514e", style="italic",
         )
-        _add_win_rate_colorbar(fig, (0.07, 0.855, 0.16, 0.015), win_rate_by_rank)
+        _add_coalition_colorbar(fig, (0.07, 0.855, 0.16, 0.015), color_by_rank, label=metric["colorbar_label"])
 
-        fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot_available.png"
+        fig_path = (
+            figs_dir
+            / f"{run_name}_{num_dist}x{seats_per_district}_{slate}_{mode}_coalition_boxplot_available{metric['filename_suffix']}.png"
+        )
         fig.savefig(fig_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
         print(f"[summarize_results] Wrote: {fig_path}")
@@ -1350,6 +1499,7 @@ def plot_coalition_boxplot_available(
 
 def plot_coalition_boxplot_grid(
     df: pd.DataFrame, config, figs_dir: Path, run_name: str, mode: str = "slate_pl",
+    *, color_by: str = "win_rate",
 ) -> None:
     """
     Grid of rank-based coalition boxplots, one panel per candidate slate in this
@@ -1357,8 +1507,11 @@ def plot_coalition_boxplot_grid(
     "2x2" -- see plot_coalition_boxplot for the per-panel design and why `mode`
     defaults to "slate_pl").
 
+    Args:
+        color_by: See plot_coalition_boxplot.
+
     Outputs:
-        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<mode>_coalition_boxplot_grid.png
+        outputs/<run_name>/summaries/figures/<run_name>_<n>x<w>_<mode>_coalition_boxplot_grid[_fpv_share].png
     """
     groups = [
         g for g in config["slate_to_candidates"]
@@ -1373,6 +1526,7 @@ def plot_coalition_boxplot_grid(
         print(f"[summarize_results] No rows for mode={mode!r}; skipping coalition boxplot grid.")
         return
 
+    metric = COALITION_COLOR_METRICS[color_by]
     ncols = 2
     nrows = -(-len(groups) // ncols)  # ceil division
 
@@ -1388,10 +1542,14 @@ def plot_coalition_boxplot_grid(
             if not data_by_rank:
                 ax.axis("off")
                 continue
+            color_by_rank = (
+                _rank_fpv_color_data(district_df, vap_df, group) if color_by == "fpv_share" else win_rate_by_rank
+            )
             tick_step = max(1, len(data_by_rank) // 10)
             _draw_coalition_boxplot(
-                ax, data_by_rank, win_rate_by_rank, _group_label(group),
+                ax, data_by_rank, color_by_rank, _group_label(group),
                 tick_step=tick_step, small=True,
+                zero_case_label=metric["zero_case_label"](_group_label(group)),
             )
             drawn += 1
 
@@ -1416,7 +1574,9 @@ def plot_coalition_boxplot_grid(
         )
         fig.tight_layout(rect=(0, 0, 1, 0.91))
 
-        fig_path = figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{mode}_coalition_boxplot_grid.png"
+        fig_path = (
+            figs_dir / f"{run_name}_{num_dist}x{seats_per_district}_{mode}_coalition_boxplot_grid{metric['filename_suffix']}.png"
+        )
         fig.savefig(fig_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
         print(f"[summarize_results] Wrote: {fig_path}")
@@ -1663,11 +1823,15 @@ def summarize_results(config) -> Path:
 
     plot_representation_bubbles(df_plan, config, focal_group, iprop, figs_dir, run_name)
 
-    # Coalition win-rate boxplots (district-level, not plan-aggregated -- these
-    # need per-district VAP share, so they use `df` rather than `df_plan`).
-    plot_coalition_boxplot(df, config, figs_dir, run_name)
-    plot_coalition_boxplot_available(df, config, figs_dir, run_name)
-    plot_coalition_boxplot_grid(df, config, figs_dir, run_name)
+    # Coalition boxplots (district-level, not plan-aggregated -- these need
+    # per-district VAP share, so they use `df` rather than `df_plan`). Each is
+    # generated twice: once colored by win rate, once by average first-place-
+    # vote share (see COALITION_COLOR_METRICS) -- the fpv_share pass reads
+    # profiles.zip and is meaningfully slower than the others.
+    for color_by in COALITION_COLOR_METRICS:
+        plot_coalition_boxplot(df, config, figs_dir, run_name, color_by=color_by)
+        plot_coalition_boxplot_available(df, config, figs_dir, run_name, color_by=color_by)
+        plot_coalition_boxplot_grid(df, config, figs_dir, run_name, color_by=color_by)
 
     print(f"[summarize_results] Wrote CSV: {csv_path}")
     print(f"[summarize_results] Figures in: {figs_dir}")

@@ -1,15 +1,33 @@
 # Chicago City Council Reform 2026
 
+## Table of Contents
+
+- [Background](#background)
+- [Data](#data)
+- [Methodology](#methodology)
+  - [Candidate Availability](#candidate-availability)
+- [Configurations](#configurations)
+- [Shared parameters](#shared-parameters)
+- [Cohesion matrices](#cohesion-matrices)
+- [Initial Results](#initial-results)
+  - [Basic – 50×1 Plurality](#basic--501-plurality)
+  - [10 × 5 STV](#10--5-stv)
+  - [10 × 3 STV](#10--3-stv)
+  - [Low POC Turnout](#low-poc-turnout)
+  - [10 × 5 STV - Asian Bloc Separate](#10--5-stv---asian-bloc-separate)
+  - [10 × 5 STV - Larger Asian Districts](#10--5-stv---larger-asian-districts)
+  - [50 × 1 IRV](#50--1-irv)
+  - [50 × 1 IRV - Larger Asian Districts](#50--1-irv---larger-asian-districts)
+  - [50 × 1 PSMD - Larger Asian Districts](#50--1-psmd---larger-asian-districts)
+
+<div style="page-break-after: always;"></div>
 
 ## Background
 
-Chicago currently elects its City Council from **50 single-member wards** in a runoff system. This project updates the Metric Geometry and Gerrymandering Group's
-2019 city council reform proposals, comparing the status quo against
-multi-member districts elected by **Single Transferable Vote (STV)**, along with
-variations on turnout and voter-bloc structure. Representation is
-measured by simulating elections over an ensemble of districting plans
-and tallying the seats won by each group's candidates.
+This project is intended to be a replication of the Metric Geometry and Gerrymandering Group's
+2019 report on city council reform in the city of Chicago. The Chicago city council--both then and now--elects council members (alderpersons) from **50 single-member districts (wards)** using a runoff system that sees the top two vote-getters in a general election face each other in a runoff election if no candidate has secured a majority vote in the general. Since 2019, Chicago has had another city council election in 2023 in which [xx] new members were elected to city council. It was also the first city-wide election to use the new district maps drawn up after the latest decennial census in 2020. Combined with the shifting demographics and geography of the city, we thought it worthwhile to revisit the 2019 report and apply more mature methods to an analysis of Chicago city council elections.
 
+This report employs new and updated tools like GerryChain and VoteKit in order to simulate a variety of electoral systems and scenarios - both from the original report and more novel configurations. Primarily, we look at simulations of multi-member districts elected by **Single Transferable Vote (STV)**, low person-of-color turnout, and optimizing for larger Asian bloc percentage-share in both 50 and 10 district plans.
 
 ## Data
 
@@ -26,7 +44,7 @@ To simulate candidate availability per-ward for each voting bloc, we make a few 
 
 To model this in our simulation, we sample from the first-success geometric distribution with a success probability of $0.3$, which provides an expected value of $3.33$ - roughly in the same ballpark as the average total candidates running per district in 2023. We sample in this way for every single district in every subsample of the districting ensemble, allowing some variance in total available candidates across districts and plans. However, because generating values in this way could result in a candidate pool size that is large enough to be unrealistic (and computationally expensive,) we set a cap on the total candidates by making a calculation with the district VAP:
 
-$$Total\ Candidates = \lceil log_{10}(District\ VAP) \rceil$$
+$$Max\ Candidates = \lceil log_{10}(District\ VAP) \rceil$$
 
 The application of the logarithmic function with each district's VAP as input serves to mirror the maximum observed candidates in the 2023 general election - 11 candidates in both Ward 5 and Ward 6. Since each ward in the existing 50 district maps contains an average of 44,000 constituents in the voting age population, this calculation will result in 11 total candidates. Using the same formula, maps with 10 districts will be expected to see a cap of 13 candidates - the reasoning here that larger districts with more seats available would see a larger candidate pool with the size limited by the willingness or ability of would-be candidates to persist their campaigns until election day.
 
@@ -131,6 +149,8 @@ with an available candidate** (excluding districts where the focal slate was
 apportioned zero candidates and so could never win, regardless of VAP share),
 and a **coalition win-rate grid** (the unrestricted design repeated once per
 racial group in a 2×2 layout).
+
+### Comparison to 2019 Report - 10 X 5 STV
 
 
 ### Basic – 50×1 Plurality

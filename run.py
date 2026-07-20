@@ -177,6 +177,14 @@ def _incomplete_election_modes(config):
                     print(f"Election results for {mode} mode and {d} number of districts have incorrect length.")
                     incomplete.append(mode)
                     break
+                # first_place_vote_shares predates existing results files, so a
+                # missing/mismatched-length list here means this file was
+                # written before that field existed and needs re-simulating to
+                # backfill it (see pipeline/simulate_elections.py).
+                if len(data.get("first_place_vote_shares", [])) != expected_len:
+                    print(f"Election results for {mode} mode and {d} number of districts are missing first_place_vote_shares.")
+                    incomplete.append(mode)
+                    break
             except Exception:
                 incomplete.append(mode)
                 break
@@ -206,13 +214,14 @@ def has_valid_summaries(config):
     # simulate_elections runs every district_config against every voting rule
     # (see pipeline/simulate_elections.py), and summarize_results draws a bymode
     # + byslate figure per (district-magnitude, method) pair, one
-    # bubbles-by-method figure per district-magnitude, and (since the coalition
-    # win-rate boxplots were added) one standalone + one available-candidate-only
-    # + one grid coalition boxplot per district-magnitude (mode fixed to
-    # slate_pl, not multiplied by method).
+    # bubbles-by-method figure per district-magnitude, and one standalone +
+    # one available-candidate-only + one grid coalition boxplot per
+    # district-magnitude (mode fixed to slate_pl, not multiplied by method) --
+    # each of those 3 coalition figures is drawn twice, once per color metric
+    # in COALITION_COLOR_METRICS (win rate, first-place-vote share), hence *6.
     distinct_magnitudes = len({(d["num_districts"], d["winners"]) for d in config["district_configs"]})
     num_methods = len(config["voting_configs"])
-    expected_figs = distinct_magnitudes * (2 * num_methods + 1 + 3)
+    expected_figs = distinct_magnitudes * (2 * num_methods + 1 + 6)
     actual_figs = sum(1 for _ in figs.glob("*.png"))
     if actual_figs != expected_figs:
         print("Incorrect number of figures.")
@@ -298,7 +307,7 @@ def run_pipeline(config):
 def main():
     # configurations = load_all_config_files(config_dir="configs")
     configurations = [
-                        load_config("configs/baseline-large.json"), 
+                        load_config("configs/10x5-stv.json"), 
                         ]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")

@@ -145,32 +145,54 @@ def has_valid_profiles(config):
                 return False
     return True
 
+def _incomplete_election_modes(config):
+    """
+    Voter modes whose election_results aren't yet complete for this config.
+
+    Broken out from has_valid_election_results so callers (run_pipeline) can
+    pass just this subset to simulate_elections, instead of re-simulating
+    every mode whenever any single one of them is stale or missing.
+    """
+    run = config["run_name"]
+    base = Path("outputs") / run / "election_results"
+    incomplete = []
+    for mode in get_voter_models(config):
+        mode_dir = base / mode
+        if not mode_dir.is_dir():
+            print(f"Election results for {mode} mode do not exist.")
+            incomplete.append(mode)
+            continue
+        for d in config["district_configs"]:
+            n = d["num_districts"]
+            files = list(mode_dir.glob(f"{run}_{n}_districts_*_voter_mode_{mode}.json"))
+            if len(files) != 1:
+                print(f"Election results for {mode} mode and {d} number of districts do not exist.")
+                incomplete.append(mode)
+                break
+            try:
+                with open(files[0], "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                expected_len = config["num_subsamples"] * n * config["num_reps"]
+                if len(data.get("profile_files", [])) != expected_len:
+                    print(f"Election results for {mode} mode and {d} number of districts have incorrect length.")
+                    incomplete.append(mode)
+                    break
+            except Exception:
+                incomplete.append(mode)
+                break
+    return incomplete
+
+
 def has_valid_election_results(config):
     run = config["run_name"]
     base = Path("outputs") / run / "election_results"
     if not base.is_dir():
         print("Election results do not exist. Running pipeline from election simulation stage.")
         return False
-    for mode in get_voter_models(config):
-        mode_dir = base / mode
-        if not mode_dir.is_dir():
-            print(f"Election results for {mode} mode do not exist. Running pipeline from election simulation stage.")
-            return False
-        for d in config["district_configs"]:
-            n = d["num_districts"]
-            files = list(mode_dir.glob(f"{run}_{n}_districts_*_voter_mode_{mode}.json"))
-            if len(files) != 1:
-                print(f"Election results for {mode} mode and {d} number of districts do not exist. Running pipeline from election simulation stage.")
-                return False
-            try:
-                with open(files[0], "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                expected_len = config["num_subsamples"] * n * config["num_reps"]
-                if len(data.get("profile_files", [])) != expected_len:
-                    print(f"Election results for {mode} mode and {d} number of districts have incorrect length. Running pipeline from election simulation stage.")
-                    return False
-            except Exception:
-                return False
+    incomplete = _incomplete_election_modes(config)
+    if incomplete:
+        print(f"Election results incomplete for mode(s) {incomplete}. Running pipeline from election simulation stage.")
+        return False
     return True
 
 def has_valid_summaries(config):
@@ -246,7 +268,7 @@ def run_pipeline(config):
                         summarize_results(config)
                 else:
                     with profile_stage("Simulate Elections", run_name):
-                        simulate_elections(config)
+                        simulate_elections(config, modes=_incomplete_election_modes(config))
                     with profile_stage("Summarize Results", run_name):
                         summarize_results(config)
             else:

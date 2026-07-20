@@ -12,10 +12,11 @@ import csv
 import os
 import inspect
 import tempfile
+import time
 from pathlib import Path
 from joblib import Parallel, delayed
 from votekit import RankProfile, ScoreProfile, elections
-from typing import List, Iterable, Any, get_args
+from typing import List, Iterable, Any, Optional, get_args
 from dataclasses import dataclass
 from pipeline.utils.helpers import get_voter_models
 
@@ -23,9 +24,13 @@ from pipeline.utils.helpers import get_voter_models
 
 # Optional progress bar for joblib.
 try:
-    from joblib_progress import joblib_progress 
-except Exception: 
-    joblib_progress = None 
+    from joblib_progress import joblib_progress
+except Exception:
+    joblib_progress = None
+
+# Retry knobs for opening profiles.zip -- see _open_zip_with_retry.
+_ZIP_OPEN_MAX_ATTEMPTS = 3
+_ZIP_OPEN_RETRY_DELAY_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -84,6 +89,25 @@ def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
             winners.append(str(next(iter(s))))
     return winners
 
+def _open_zip_with_retry(zip_path: str | Path) -> zipfile.ZipFile:
+    """
+    Open zip_path as a ZipFile, retrying briefly on BadZipFile.
+
+    A worker can transiently see a truncated central directory if profiles.zip
+    is opened at the exact moment some other process is still writing it (e.g.
+    an overlapping generate_profiles run for the same config) -- a couple of
+    short retries is enough for the file to settle, without masking a
+    genuinely corrupted archive, which still raises after the final attempt.
+    """
+    for attempt in range(1, _ZIP_OPEN_MAX_ATTEMPTS + 1):
+        try:
+            return zipfile.ZipFile(zip_path)
+        except zipfile.BadZipFile:
+            if attempt == _ZIP_OPEN_MAX_ATTEMPTS:
+                raise
+            time.sleep(_ZIP_OPEN_RETRY_DELAY_SECONDS)
+
+
 def _load_profile_from_zip(zip_path: str | Path, member_name: str, profile_class):
     """
     Extract a single profile csv from the run's profiles.zip and load it into the
@@ -93,7 +117,8 @@ def _load_profile_from_zip(zip_path: str | Path, member_name: str, profile_class
     stream) directly, so we extract to a unique temp file and delete it after
     loading. Using NamedTemporaryFile avoids collisions between parallel workers
     processing different profiles concurrently; each worker opens its own ZipFile
-    handle onto the same archive on disk, which is safe for concurrent reads.
+    handle onto the same archive on disk, which is safe for concurrent reads --
+    see _open_zip_with_retry for the one case that isn't (a concurrent writer).
 
     Args:
         zip_path: Path to the run's profiles.zip archive.
@@ -105,7 +130,7 @@ def _load_profile_from_zip(zip_path: str | Path, member_name: str, profile_class
     """
     with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp:
         temp_path = Path(tmp.name)
-        with zipfile.ZipFile(zip_path) as archive:
+        with _open_zip_with_retry(zip_path) as archive:
             with archive.open(member_name) as infile:
                 tmp.write(infile.read())
 
@@ -194,12 +219,16 @@ def _parse_district_configs(raw: Any) -> List[DistrictConfig]:
     return parsed
 
 
-def simulate_elections(config) -> None:
+def simulate_elections(config, modes: Optional[List[str]] = None) -> None:
     """
     Run elections in parallel over all voter profiles.
 
     Args:
         config: Parsed config dict.
+        modes: Which voter models to run elections for. Defaults to every model
+            in config (get_voter_models(config)); pass a subset (e.g. just the
+            modes with incomplete election_results) to skip re-simulating modes
+            that don't need it.
 
     Outputs:
         One json file per (mode, district_count, winners) combination at
@@ -220,7 +249,7 @@ def simulate_elections(config) -> None:
     # all voting rules included within the config
     election_plan = _build_election_plan(config["voting_configs"])
 
-    modes = get_voter_models(config)
+    modes = modes if modes is not None else get_voter_models(config)
 
     # Use all available cores by default. Set SIMULATE_ELECTIONS_N_JOBS=1 to run
     # serially in the main process so breakpoints inside _process_profile are hit

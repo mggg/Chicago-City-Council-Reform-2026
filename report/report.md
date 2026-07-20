@@ -16,6 +16,22 @@ and tallying the seats won by each group's candidates.
 - **Geodata:** `./data/chicago_precincts_vap_cvap.gpkg` (1,291 Chicago precincts).
 - **Census Data**: Demographic data pulled from the 2020 Decennial Census at the block level and aggregated to precincts.
 
+## Methodology
+
+### Candidate Availability
+
+To simulate candidate availability per-ward for each voting bloc, we make a few decisions and assumptions guided by available evidence from previous Chicago general city council elections. The first is deciding how many total candidates will be on the ballot for a given ward. In 2023, the average number of candidates running across all 50 wards (not counting write-ins) was approximately 3.48, with a large number of wards featuring anywhere between one to four candidates in the election, and fewer featuring counts larger than five.
+
+![2023 Candidate Counts by Ward](../assets/candidates-by-ward.png)
+
+To model this in our simulation, we sample from the first-success geometric distribution with a success probability of $0.3$, which provides an expected value of $3.33$ - roughly in the same ballpark as the average total candidates running per district in 2023. We sample in this way for every single district in every subsample of the districting ensemble, allowing some variance in total available candidates across districts and plans. However, because generating values in this way could result in a candidate pool size that is large enough to be unrealistic (and computationally expensive,) we set a cap on the total candidates by making a calculation with the district VAP:
+
+$$Total\ Candidates = \lceil log_{10}(District\ VAP) \rceil$$
+
+The application of the logarithmic function with each district's VAP as input serves to mirror the maximum observed candidates in the 2023 general election - 11 candidates in both Ward 5 and Ward 6. Since each ward in the existing 50 district maps contains an average of 44,000 constituents in the voting age population, this calculation will result in 11 total candidates. Using the same formula, maps with 10 districts will be expected to see a cap of 13 candidates - the reasoning here that larger districts with more seats available would see a larger candidate pool with the size limited by the willingness or ability of would-be candidates to persist their campaigns until election day.
+
+Next, we make an assumption that the racial composition of the slate pool will be roughly proportional to that of the VAP in each district. Using the bloc proportions to create an interval with the intent to sample candidates of different slates from this interval. However, before we do we first square each element, normalizing the "squared interval" over the sum of the squared values. This creates an "exaggeration" effect when we sample slate candidates. In other words, if a district has a large Black VAP, it's even more likely that the Black voter-preferred slate of candidates will be larger than the others. Similarly, if the Asian VAP is small it's much less likely that the Asian voter-preferred slate will have many candidates - if any, since we allow for slates to be empty. This is intended to model how community dynamics, segregation, or lack of institutional support may impact candidate availability across geography with respect to race.
+
 
 ## Configurations
 

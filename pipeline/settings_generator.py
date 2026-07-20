@@ -10,6 +10,8 @@ and district.
 import json
 import gzip
 import random
+import math
+import numpy as np
 import geopandas as gpd
 from pathlib import Path
 import jsonlines as jl
@@ -26,6 +28,14 @@ DEFAULT_GROUP_VAP_COLUMNS = {
     "A": "asian_nhpi_vap_20",
 }
 
+# Calibration for the per-district candidate-count draw (see _sample_candidate_count):
+# a typical 50-district plan's ~44,000-VAP district should reproduce the previous
+# fixed p=0.3 geometric baseline (E[candidates]=3.33, matching 2023's real citywide
+# average of ~3.48 candidates/ward). Districts with more VAP per seat (e.g. 10-district
+# plans, ~220,000 VAP) get a proportionally larger expected candidate count.
+_CANDIDATE_COUNT_CALIBRATION_VAP = 44_025
+_CANDIDATE_COUNT_CALIBRATION_EXPECTED = 1 / 0.3
+CANDIDATE_COUNT_LOG_VAP_OFFSET = math.log(_CANDIDATE_COUNT_CALIBRATION_VAP) - _CANDIDATE_COUNT_CALIBRATION_EXPECTED
 
 def get_bloc_definitions(config):
     """
@@ -125,45 +135,45 @@ def _exaggerate_by_squares(proportions):
     return {k: v / total for k, v in squared.items()}
 
 
-def _sample_slate_counts(proportions, total_candidates):
+def _sample_slate_counts(proportions, candidate_count):
     """
-    Fill total_candidates candidate slots by sampling with replacement from
+    Fill candidate_count candidate slots by sampling with replacement from
     proportions, treated as a categorical distribution over slates.
 
     Unlike a deterministic apportionment, this is stochastic: a slate's count
-    is a random draw weighted by its share, not its share times total_candidates
+    is a random draw weighted by its share, not its share times candidate_count
     rounded to the nearest integer, so counts vary run to run even for the same
     proportions.
 
     Args:
         proportions: Dict mapping slate -> probability (sums to ~1).
-        total_candidates: Number of candidate slots to fill; must be >= 0.
+        candidate_count: Number of candidate slots to fill; must be >= 0.
 
     Returns:
         Dict mapping each slate to how many slots it was drawn for (some may
-        be 0), summing to total_candidates.
+        be 0), summing to candidate_count.
     """
-    if total_candidates < 0:
-        raise ValueError(f"total_candidates ({total_candidates}) must be non-negative.")
+    if candidate_count < 0:
+        raise ValueError(f"candidate_count ({candidate_count}) must be non-negative.")
 
     slates = list(proportions)
     counts = {s: 0 for s in slates}
-    if total_candidates == 0:
+    if candidate_count == 0:
         return counts
 
     weights = [proportions[s] for s in slates]
-    for s in random.choices(slates, weights=weights, k=total_candidates):
+    for s in random.choices(slates, weights=weights, k=candidate_count):
         counts[s] += 1
     return counts
 
 
-def _build_slate_to_candidates(row, slate_columns, total_candidates):
+def _build_slate_to_candidates(row, slate_columns, candidate_count):
     """
     Build a district-specific slate_to_candidates mapping sized proportionally
     to each slate's share of modeled VAP in this district.
 
     Each slate's linear VAP share is exaggerated by squaring-and-renormalizing
-    (see _exaggerate_by_squares), then total_candidates candidate slots are
+    (see _exaggerate_by_squares), then candidate_count candidate slots are
     filled by sampling from that exaggerated distribution (see
     _sample_slate_counts) rather than a deterministic apportionment — so the
     resulting slate sizes both skew toward the district's dominant slate(s)
@@ -176,7 +186,7 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates):
     Args:
         row: Row from the district population dataframe.
         slate_columns: Dict mapping each slate to its VAP column name.
-        total_candidates: Total number of candidate slots to fill.
+        candidate_count: Total number of candidate slots to fill.
 
     Returns:
         Dict mapping each slate with a nonzero count to a list of candidate ids,
@@ -191,7 +201,7 @@ def _build_slate_to_candidates(row, slate_columns, total_candidates):
         proportions = {s: 1.0 / len(slates) for s in slates}
 
     exaggerated = _exaggerate_by_squares(proportions)
-    counts = _sample_slate_counts(exaggerated, total_candidates)
+    counts = _sample_slate_counts(exaggerated, candidate_count)
     return {
         s: [f"{s}{i}" for i in range(1, counts[s] + 1)]
         for s in slates
@@ -308,7 +318,7 @@ def generate_settings(config):
         outputs/settings/<run_name>_settings/<district_count>/<run_name>_<district_count>_sample_settings_district_plan_<plan_idx>_district_<district_id>.json.
         where <plan_idx> is the zero-based chain sample index and <district_id> is the district label.
         bloc_proportions in each file are turnout-adjusted focal group proportions.
-        slate_to_candidates in each file is resized per-district: total_candidates (default:
+        slate_to_candidates in each file is resized per-district: candidate_count (default:
         the candidate count from config's slate_to_candidates) is apportioned across slates
         in proportion to each slate's share of modeled VAP in that district. A slate
         sampled zero candidates is dropped from slate_to_candidates, and its column is
@@ -325,10 +335,6 @@ def generate_settings(config):
     ))
     group_columns = get_group_vap_columns(config, demographic_groups)
     slate_columns = get_group_vap_columns(config, config["slate_to_candidates"].keys())
-    total_candidates = config.get(
-        "total_candidates",
-        sum(len(v) for v in config["slate_to_candidates"].values()),
-    )
 
     population_data = gpd.read_file(config['geodata_path'])
     needed_columns = list(dict.fromkeys(
@@ -341,6 +347,7 @@ def generate_settings(config):
     num_subsamples = config['num_subsamples']
     subsample_interval = chain_length // num_subsamples   
 
+   
     # pull only the relevant keys from config to pass downstream
     # (slate_to_candidates, cohesion_parameters, and alphas are computed
     # per-district below, not passed through as-is)
@@ -371,8 +378,21 @@ def generate_settings(config):
                 for _, row in data_by_district.iterrows():
                     district = row.name
                     district_settings = _build_district_settings(row, config, group_columns, bloc_definitions)
+
+                    # Both the ceiling and the expected value of the candidate-count draw
+                    # scale with this district's VAP (see CANDIDATE_COUNT_LOG_VAP_OFFSET):
+                    # candidate_max is the log-scale ceiling, and the geometric
+                    # distribution's success probability is derived from that same
+                    # log(VAP) value, so larger districts (e.g. 10-district plans) draw
+                    # from a distribution with a larger expected candidate count than
+                    # smaller ones (e.g. 50-district plans), not just a higher ceiling.
+                    log_vap = math.log(district_settings[config["population_vap_column"]])
+                    candidate_max = math.ceil(log_vap)
+                    expected_candidates = max(1.0, log_vap - CANDIDATE_COUNT_LOG_VAP_OFFSET)
+                    candidate_count = min(np.random.geometric(1 / expected_candidates), candidate_max)
+
                     slate_to_candidates = _build_slate_to_candidates(
-                        row, slate_columns, total_candidates
+                        row, slate_columns, candidate_count
                     )
                     active_slates = list(slate_to_candidates)
                     cohesion_parameters = _filter_cohesion_to_slates(config["cohesion_parameters"], active_slates)

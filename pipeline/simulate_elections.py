@@ -76,18 +76,25 @@ def _build_election_plan(voting_configs: dict) -> List[tuple]:
 
 def _candidate_list_from_elected(elected: Iterable[set]) -> List[str]:
     """
-    Flatten votekit election output (iterable of singleton sets) into a list of strings.
+    Flatten votekit election output (iterable of per-round elected sets) into a
+    list of strings.
+
+    A round's set isn't always a singleton: multi-winner methods like FastSTV
+    can elect several candidates in the same round (e.g. multiple candidates
+    crossing quota together, or a final round electing everyone once remaining
+    candidates == remaining seats), so every candidate in every round's set
+    must be kept, not just one.
 
     Args:
-        elected: Iterable of singleton sets, as returned by votekit election methods.
+        elected: Iterable of sets (one per round), as returned by votekit
+            election methods -- each set may contain one or more candidates.
 
     Returns:
         List of candidate id strings in election order. Empty sets are skipped silently.
     """
     winners: List[str] = []
     for s in elected:
-        if s:
-            winners.append(str(next(iter(s))))
+        winners.extend(str(c) for c in s)
     return winners
 
 def _open_zip_with_retry(zip_path: str | Path) -> zipfile.ZipFile:

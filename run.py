@@ -7,6 +7,7 @@ import json
 import sys
 import gzip
 import zipfile
+import zlib
 from pipeline.district_generator import generate_districts
 from pipeline.settings_generator import generate_settings
 from pipeline.profile_generator import generate_profiles
@@ -123,7 +124,11 @@ def has_valid_profiles(config):
                 )
                 return False
             members = archive.namelist()
-    except (zipfile.BadZipFile, OSError) as e:
+    except (zipfile.BadZipFile, OSError, zlib.error, EOFError) as e:
+        # testzip()/read() decompress every member to verify its CRC, so a
+        # truncated entry (e.g. a process killed mid-write) surfaces as a raw
+        # zlib.error rather than zipfile.BadZipFile -- both mean the archive
+        # can't be trusted.
         print(f"Profiles archive is unreadable ({e}). Running pipeline from profiles stage.")
         return False
 
@@ -307,8 +312,12 @@ def run_pipeline(config):
 def main():
     # configurations = load_all_config_files(config_dir="configs")
     configurations = [
-                        load_config("configs/10x5-stv.json"), 
-                        ]
+        load_config("configs/10x3-stv.json"),
+        load_config("configs/10x5-stv.json"),
+        load_config("configs/asian-seperate-bloc.json"),
+        load_config("configs/asian_optimized.json"),
+        load_config("configs/low-poc-turnout.json"),
+    ]
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
     generate_data()

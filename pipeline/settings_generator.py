@@ -354,7 +354,9 @@ def generate_settings(config):
     output_settings = {k:config[k] for k in config if k in district_params}
     run_name = config['run_name']
 
-    for district_num in [d_config['num_districts'] for d_config in config['district_configs']]:
+    for district_num, winners in [
+        (d_config['num_districts'], d_config['winners']) for d_config in config['district_configs']
+    ]:
         settings_folder = Path(f'outputs/{run_name}/settings/{district_num}')
         settings_folder.mkdir(exist_ok=True, parents=True)
 
@@ -384,9 +386,17 @@ def generate_settings(config):
                     # from VAP, so different district-magnitude configs can be
                     # tuned independently (e.g. a lower p, and so a larger expected
                     # candidate count, for 10-district plans than 50-district ones).
+                    # Floored at `winners`: an election can never elect more seats
+                    # than there are candidates, so a multi-winner district (e.g.
+                    # 5-seat STV) must have at least that many candidates on the
+                    # ballot regardless of what the geometric draw happened to
+                    # sample -- the geometric distribution's support starts at 1
+                    # and has real mass below small ceilings like 5, so without
+                    # this floor some districts would otherwise be unelectable.
                     vap = district_settings[config["population_vap_column"]]
                     candidate_max = math.ceil(math.log(vap))
                     candidate_count = min(np.random.geometric(config["candidate_geometric_p"]), candidate_max)
+                    candidate_count = max(candidate_count, winners)
 
                     slate_to_candidates = _build_slate_to_candidates(
                         row, slate_columns, candidate_count

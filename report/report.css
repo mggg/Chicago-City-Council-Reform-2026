@@ -6,7 +6,13 @@ body {
     line-height: 1.5;
 }
 
-h1, h2, h3 {
+h1 {
+    font-family: "CMU Serif", "Computer Modern Roman", Georgia, serif;
+    color: #006b9c;
+    text-align: center;
+} 
+
+h2, h3 {
     font-family: "CMU Serif", "Computer Modern Roman", Georgia, serif;
     color: #006b9c;
 }

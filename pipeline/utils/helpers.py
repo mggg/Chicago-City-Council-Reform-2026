@@ -314,6 +314,98 @@ def save_district_plan_png(
     return output_path
 
 
+def _format_dict_inline(d: Dict[str, Any]) -> str:
+    """Render a flat dict as "k1=v1, k2=v2, ..." for a single settings-box row."""
+    return ", ".join(f"{k}={v}" for k, v in d.items())
+
+
+def build_config_settings(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build the standard label -> value settings shown by add_config_settings_box:
+    ensemble size, turnout, and one row per bloc's cohesion parameters.
+    Centralized here so every visualization that displays a settings box is
+    describing a given config the same way, rather than each one re-deriving
+    its own subset of fields.
+
+    Args:
+        config: Parsed config dict.
+
+    Returns:
+        Ordered dict of display label -> formatted value.
+    """
+    settings = {
+        "Ensemble size": f"{config['num_subsamples']} plans ({config['chain_length']:,}-step chain)",
+        "Turnout": _format_dict_inline(config["turnout"]),
+    }
+    for bloc, params in config["cohesion_parameters"].items():
+        settings[f"Cohesion — {bloc}"] = _format_dict_inline(params)
+    return settings
+
+
+def add_config_settings_box(
+    fig,
+    settings: Dict[str, Any],
+    *,
+    title: str = "Configuration",
+    x: float = 0.02,
+    y: float = 1.09,
+    fontsize: float = 8.5,
+) -> None:
+    """
+    Draw a small boxed panel of key/value settings in the upper-left corner of a
+    figure, in one fixed style so every visualization that includes a settings
+    box looks the same: a bold centered title over a left-aligned settings list,
+    same font/background as the rest of the figure, black border. Draws in
+    figure-fraction coordinates above the axes (y can exceed 1) -- callers need
+    enough top margin (taller figsize, and/or suptitle/subtitle placed below the
+    box) for it not to be clipped.
+
+    Args:
+        fig: The matplotlib Figure to annotate.
+        settings: Ordered mapping of label -> display value, one row each
+            (see build_config_settings).
+        title: Bold header line centered above the settings rows.
+        x: Figure-fraction x position of the box's left edge.
+        y: Figure-fraction y position of the box's top edge.
+        fontsize: Font size for the settings rows (title is one point larger).
+    """
+    import matplotlib.patches as mpatches
+
+    body = "\n".join(f"{label}:  {value}" for label, value in settings.items())
+    pad_x, pad_y, gap = 0.012, 0.012, 0.012
+
+    # Proportional (non-monospace) fonts can't be centered by padding with
+    # spaces the way a fixed-width grid can, so the title is measured and
+    # positioned as its own artist rather than baked into the body string.
+    title_text = fig.text(
+        x + pad_x, y - pad_y, title,
+        transform=fig.transFigure, ha="left", va="top", fontsize=fontsize + 1, fontweight="bold",
+    )
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    title_bbox = title_text.get_window_extent(renderer).transformed(fig.transFigure.inverted())
+
+    body_text = fig.text(
+        x + pad_x, title_bbox.y0 - gap, body,
+        transform=fig.transFigure, ha="left", va="top", fontsize=fontsize, linespacing=1.6,
+    )
+    fig.canvas.draw()
+    body_bbox = body_text.get_window_extent(renderer).transformed(fig.transFigure.inverted())
+
+    box_width = max(title_bbox.width, body_bbox.width) + 2 * pad_x
+    box_top = y
+    box_bottom = body_bbox.y0 - pad_y
+    box = mpatches.FancyBboxPatch(
+        (x, box_bottom), box_width, box_top - box_bottom,
+        transform=fig.transFigure, boxstyle="round,pad=0.006",
+        facecolor=fig.get_facecolor(), edgecolor="black", linewidth=1,
+        zorder=title_text.get_zorder() - 1,
+    )
+    fig.add_artist(box)
+    title_text.set_x(x + box_width / 2)
+    title_text.set_horizontalalignment("center")
+
+
 def find_settings_file(
     settings_dir: Path,
     run_name: str,

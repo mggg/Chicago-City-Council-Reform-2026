@@ -6,19 +6,15 @@
 - [Data](#data)
 - [Methodology](#methodology)
   - [Candidate Availability](#candidate-availability)
-- [Configurations](#configurations)
 - [Shared parameters](#shared-parameters)
 - [Cohesion matrices](#cohesion-matrices)
-- [Initial Results](#initial-results)
-  - [Basic – 50×1 Plurality](#basic--501-plurality)
-  - [10 × 5 STV](#10--5-stv)
-  - [10 × 3 STV](#10--3-stv)
-  - [Low POC Turnout](#low-poc-turnout)
-  - [10 × 5 STV - Asian Bloc Separate](#10--5-stv---asian-bloc-separate)
-  - [10 × 5 STV - Larger Asian Districts](#10--5-stv---larger-asian-districts)
-  - [50 × 1 IRV](#50--1-irv)
-  - [50 × 1 IRV - Larger Asian Districts](#50--1-irv---larger-asian-districts)
-  - [50 × 1 PSMD - Larger Asian Districts](#50--1-psmd---larger-asian-districts)
+- [Election Scenarios](#4-election-scenarios)
+  - [Comparison to 2019 Report - 10 X *m* STV](#41-comparison-to-2019-report---10-x-m-stv)
+  - [Status Quo - 50 X 1 Plurality/IRV](#42-status-quo---50-x-1-pluralityirv)
+  - [Low Voter Turnout](#43-low-voter-turnout)
+  - [Optimizing for Larger Asian VAP Districts](#44-optimizing-for-larger-asian-vap-districts)
+- [Appendix](#appendix)
+  - [A. Configurations](#a-configurations)
 
 <div style="page-break-after: always;"></div>
 
@@ -45,6 +41,8 @@ Shapefile data for Chicago's wards and precincts has been obtained from the [Chi
 
 This report mirrors the 2019 study in how it manages distinctions between racial demographics: Black referring to Black non-Hispanic population, White for White non-Hispanic, Asian for Asian non-Hispanic, and Hispanic/Latino for all people designated with the Hispanic ethnicity in the census regardless of race.
 
+<p class="caption"><span class="fig-num">Table 1.</span> Chicago population by race and ethnicity across census and ACS vintages.</p>
+
 | Race | 2000 (Census) | 2010 (Census) | 2009-2013 (ACS) | 2013-2017 (ACS) | 2020 (Census) |
 |---|---|---|---|---|---|
 | Black (non-Hispanic) | 36.4% | 32.4% | 31.9% | 30.1% | 28.7% |
@@ -58,6 +56,8 @@ This report mirrors the 2019 study in how it manages distinctions between racial
 | Total Population | 2,896,016 | 2,695,598 | 2,706,101 | 2,716,450 | 2,746,424 |
 
 Notable here is the slight growth in share for both the Hispanic and Asian populations - and the sizeable decrease of the Black share of the population, around a 3.7% decrease since the 2010 census. While neighborhood and community demographic makeup in the city continues to change, Chicago remains highly segregated, with 287 voting precincts being more than 80% Black and 116 being more than 80% Hispanic. At the time time, 805 precincts are less than 20% Black, and 744 are less than 20% Hispanic.
+
+<p class="caption"><span class="fig-num">Table 2.</span> Number of Chicago precincts falling in each band of population share, by racial/ethnic group.</p>
 
 | Precincts (1,291 total) | 0-20% | 20-40% | 40-60% | 60-80% | 80-100% |
 |---|---|---|---|---|---|
@@ -86,37 +86,13 @@ Given that Asian voters have been consistently underpresented within Chicago's c
 
 Mirroring the 2019 report, we consider the four largest racial demographic groups when identifying blocs of voters with shared preferences and slates of candidates with similar policies and positions. Slates are limited to and delineated by Black, Asian, Hispanic, and White candidates. Voter blocs follow this with a major exception: we made the decision to combine White and Asian voters into a single bloc. The reasoning for this is guided by evidence that Asian and White voters in Chicago demonstrate similar behaviors and preferences at the ballot box, particularly when looking at the last several mayoral and city council elections. While there currently exists no expansive data sets or analysis examining Asian voting behavior in Chicago elections, a handful of examples do exist: MGGG's previous application of Goodman's Ecological Regression on [add source here] and [Greater Cities Institute's](https://uofi.app.box.com/s/g2wlv9836atormomsn64alse2ysapjrd) application of ecological inference on voters in the 2023 mayoral election. Considering the similarities in behavior between the two blocs, we model them as a single bloc for the purposes of this analysis.
 
-#### Cohesion matrices
-
-Rows are voter blocs, columns are candidate slates; each row sums to 1.
-
-**Standard 3-bloc** (`basic`, `low-poc-turnout`, `10x3-stv`, `10x5-stv`):
-
-| bloc ↓ / slate → | White | Black | Hispanic | Asian |
-|---|---|---|---|---|
-| **White-Asian** | 0.46 | 0.14 | 0.14 | 0.26 |
-| **Black** | 0.15 | 0.70 | 0.10 | 0.05 |
-| **Hispanic** | 0.15 | 0.10 | 0.65 | 0.10 |
-
-The `White-Asian` row is the VAP-weighted average (81% White / 19% Asian) of the
-underlying White and Asian rows (below).
-
-**Asian Bloc Separate** (`asian-seperate-bloc`):
-
-| bloc ↓ / slate → | W | B | H | A |
-|---|---|---|---|---|
-| **W** | 0.50 | 0.15 | 0.15 | 0.20 |
-| **A** | 0.30 | 0.10 | 0.10 | 0.50 |
-| **B** | 0.15 | 0.70 | 0.10 | 0.05 |
-| **H** | 0.15 | 0.10 | 0.65 | 0.10 |
-
-The cohesion parameters here have been selected based on available estimates (from ecological regression) from the earlier 2019 MGGG study on Chicago city council reform, as well as a mayoral election analysis from the University of Illinois-Chicago. The details can be found in the accompanying writeup.
-
 ### 3.3 Candidate Availability and Pool Size
 
 To simulate candidate availability per-ward for each voting bloc, we make a few decisions and assumptions guided by available evidence from previous Chicago general city council elections. The first is deciding how many total candidates will be on the ballot for a given ward. In 2023, the average number of candidates running across all 50 wards (not counting write-ins) was approximately 3.48, with a large number of wards featuring anywhere between one to four candidates in the election, and fewer featuring counts larger than five.
 
 ![2023 Candidate Counts by Ward](../assets/candidates-by-ward.png)
+
+<p class="caption"><span class="fig-num">Figure 1.</span> Number of candidates per ward in the 2023 Chicago City Council general election (write-ins excluded).</p>
 
 To model this in our simulation, we sample from the geometric distribution. For 50 district configurations, we use a probability value of $0.2$, which provides an expected value of $5$ - slightly above the average total candidates running per district in 2023. For 10 district configurations, we use a probability value of $0.1$, which provides an expected value of $10$. Generally, we'd expected plans with larger districts to see more candidates pursuing seats on council. We sample in this way for every single district in every subsample of the districting ensemble, allowing some variance in total available candidates across districts and plans. However, because generating values in this way could result in a candidate pool size that is large enough to be unrealistic (and computationally expensive,) we set a cap on the total candidates by making a calculation with the district VAP:
 
@@ -128,256 +104,257 @@ Next, we make an assumption that the racial composition of the slate pool will b
 
 ### 3.4 Voter Profile and Ballot Generation
 
+For each district in all 50 district plans of our ensemble, we generate voter preference profiles - a collection ballots from voters that rank available candidates. These rankings are determined by using VoteKit's Plackett-Luce and Bradley-Terry ballot generators, which model impulsive voter behavior and deliberative voter behavior, respectively. Each assumes that each voter bloc has a preference interval for each slate of candidates, along with tuple of cohesion parameters - one parameter for each slate.
 
-## Configurations
+Both generators share the same two-stage process, and they only differ in how the first stage plays out. Before any ballots are drawn, each bloc's preference interval is assembled by taking that bloc's cohesion for a given slate and slicing off a sub-interval of that width, then filling it in with the individual candidates of the slate according to their support. We govern the within-slate split with a set of Dirichlet alphas - in this report we hold all alphas at 1, which means that once a voter has decided to reach for a particular slate, every candidate on that slate is treated as equally preferred. The cohesion parameters (the rows of the matrices below) therefore do all the work of ordering *slates* against one another, while the interval handles the ordering of candidates *within* a slate. What separates the two models is the story we tell about how a voter walks through that interval to produce a ranking.
 
-| Run Name | Config File | Districts | Seats | Voting Method | Voter Blocs | Turnout (bloc) |
-|---|---|---|---|---|---|---|
-| Basic – 50×1 Plurality | `basic.json` | 50 × 1 | 50 | Plurality | W-A, B, H | 1.00 / 1.00 / 1.00 |
-| Low POC Turnout | `low-poc-turnout.json` | 10 × 5 | 50 | FastSTV (5 seats) | W-A, B, H | 0.75 / 0.50 / 0.50 |
-| Asian Bloc Separate – Basic | `asian-seperate-bloc.json` | 10 × 5 | 50 | FastSTV (5 seats) | A, W, B, H | 1.00 / 1.00 / 1.00 / 1.00 |
-| 10 × 3 STV | `10x3-stv.json` | 10 × 3 | 30 | FastSTV (3 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
-| 10 × 5 STV | `10x5-stv.json` | 10 × 5 | 50 | FastSTV (5 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
-| 10 × 5 STV - Larger Asian Districts | `asian_optimized.json` | 10 × 5 | 50 | FastSTV (5 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
-| 50 × 1 IRV | `50-irv.json` | 50 × 1 | 50 | IRV | W-A, B, H | 1.00 / 1.00 / 1.00 |
-| 50 × 1 IRV - Larger Asian Districts | `50-irv-asian-optimized.json` | 50 × 1 | 50 | IRV | W-A, B, H | 1.00 / 1.00 / 1.00 |
-| 50 × 1 PSMD - Larger Asian Districts | `50-psmd-asian-optimized.json` | 50 × 1 | 50 | Plurality | W-A, B, H | 1.00 / 1.00 / 1.00 |
+#### The Impulsive Voter
 
-- **Basic** — roughly the status quo baseline (50 single-member wards, plurality.)
-- **Low POC Turnout** — turnout sensitivity: every other run assumes full turnout
-  (1.00) across all blocs, so this run is the only one that varies it. The `W-A`
-  bloc turns out at 0.75, while Black and Latino turnout is lower, at 0.50 each.
-- **Asian Bloc Separate** — bloc-structure sensitivity: Asian voters modeled as
-  their own 4th bloc instead of being merged into `W-A`. We are curious to understand how modeling Asian voters as a separate bloc impacts their city council representation if candidates from their preferred slate receive heavier Asian voter support and a modest amount of crossover support from the white voting bloc.
-- **10 × 3 STV** and **10 × 5 STV** — the multi-member STV alternatives (3- and
-  5-seat districts).
-- **50 × 1 IRV** — same neutral districting, bloc structure, and turnout as
-  Basic, but elected by Instant-Runoff Voting instead of plurality.
-- **"Larger Asian Districts" runs** (10 × 5 STV, 50 × 1 IRV, and 50 × 1 PSMD
-  variants) — same voter-bloc structure and turnout as their neutral
-  counterparts, but the districting ensemble itself is biased: Gingleator
-  short-burst optimization (`optimize_for_bloc: "A"`) resamples the chain
-  toward plans with more districts above a target Asian-VAP-share threshold
-  (0.15 for the STV variant, 0.20 for the two 50 × 1 variants), instead of the
-  neutral ReCom chain the other runs use.
+The Plackett-Luce generator builds a ballot from the top down, one position at a time. Starting from the first-place slot, a voter in bloc $X$ reaches for a candidate from slate $S$ with probability equal to that bloc's cohesion for the slate, $\pi_{X,S}$; whichever slate is chosen then supplies a specific candidate by sampling from that slate's preference interval without replacement. The voter repeats this for the next position, renormalizing over whatever slates still have candidates left, and keeps going until the ballot is full. We call this the *impulsive* voter because they never look back - each ranking is a snapshot decision made in the moment, with no reconsideration of the choices already committed higher up the ballot. Concretely, a voter picks their favorite, then their next favorite from what remains, and so on, so the probability of a given slate ordering is just the product of these sequential draws.
 
-## Shared parameters
+#### The Deliberative Voter
 
-Held constant across every run:
+The Bradley-Terry generator instead asks the voter to weigh the ballot as a whole. Rather than filling positions in sequence, the probability of a complete ranking is proportional to the product of the pairwise slate preferences across *every* pair of slates on the ballot - for a ranking that places slate $S_i$ above slate $S_j$, each such head-to-head contributes a factor of $\pi_{X,S_i} / (\pi_{X,S_i} + \pi_{X,S_j})$. A voter effectively runs every candidate against every other in their head and only then settles on the ordering that is most internally consistent with all of those matchups at once. We call this the *deliberative* voter, since the ranking reflects a considered comparison of the full field rather than a run of top-down impulses. The candidate-filling stage is identical to Plackett-Luce - once the slate ordering is fixed, specific candidates are drawn from each slate's preference interval - so the two models diverge only in how much of the ballot a voter is imagined to be considering at once.
 
-- **Voter models:** `slate_pl` (Plackett-Luce) and `slate_bt` (Bradley-Terry).
-- **Voters per district:** 10,000 · 
-- **Alphas (Dirichlet):** all 1 (uniform within-slate preferences).
-- **Tiebreak:** random
+#### Cohesion Matrices
+
+Rows are voter blocs, columns are candidate slates; each row sums to 1.
+
+**Standard 3-bloc:**
+
+<p class="caption"><span class="fig-num">Table 3.</span> Standard three-bloc cohesion matrix: each voter bloc's support split across the candidate slates (rows sum to 1).</p>
+
+| bloc ↓ / slate → | White | Asian | Black | Hispanic |
+|---|---|---|---|---|
+| **White-Asian** | 0.61 | 0.22 | 0.13 | 0.04 |
+| **Black** | 0.05 | 0.10 | 0.75 | 0.10 |
+| **Hispanic** | 0.15 | 0.05 | 0.05 | 0.75 |
+
+The `White-Asian` row is the VAP-weighted average (81% White / 19% Asian) of the
+underlying White and Asian rows (below).
 
 
+<p class="caption"><span class="fig-num">Table 4.</span> Four-bloc cohesion matrix with White and Asian voters modeled as separate blocs (rows sum to 1).</p>
+
+| bloc ↓ / slate → | White | Asian | Black | Hispanic |
+|---|---|---|---|---|
+| **White** | 0.70 | 0.10 | 0.15 | 0.05 |
+| **Asian** | 0.20 | 0.75 | 0.03 | 0.02 |
+| **Black** | 0.05 | 0.10 | 0.75 | 0.10 |
+| **Hispanic** | 0.15 | 0.05 | 0.05 | 0.75 |
+
+The cohesion parameters here have been selected based on available estimates (from ecological regression) from the earlier 2019 MGGG study on Chicago city council reform, as well as a mayoral election analysis from the Greater Cities Institute.
+
+### 3.5 Voting Rules
+
+Elections for each district are simulated using VoteKit's Elections module. We use the following voting rules with the corresponding district configurations:
+
+<p class="caption"><span class="fig-num">Table 5.</span> Voting rules used in the report and the district configurations they are applied to.</p>
+
+| Voting Rule | District Configs | Seats/District | Description |
+|---|---|---|---|
+| **Plurality** | 50 × 1 | 1 (single-winner) | Voters' first choices are tallied and the candidate with the most votes wins outright - no majority required. This is the closest to Chicago's current status-quo. |
+| **IRV** (Instant-Runoff Voting) | 50 × 1 | 1 (single-winner) | The single-winner case of STV: last-place candidates are eliminated round by round and their ballots transferred to the next-ranked choice until one candidate holds a majority. |
+| **STV** (Single Transferable Vote) | 10 × 5, 10 × 3 | 5 or 3 (multi-winner) | Multi-winner ranked-choice rule using the Droop quota: candidates reaching the quota are elected and their surplus is redistributed, while last-place candidates are eliminated and transferred, until all seats are filled. |
+
+For each system, tiebreaks are performed randomly when needed.
+
+## 4 Election Scenarios
+
+In the following sections, we highlight the results of a number of electoral scenarios that were simulated using the methodology described earlier. We first draw a comparison to the results of the original 2019 study using 10 X 5 STV and 10 X 3 STV. Then, we simulate Chicago's current status quo using 50-district maps with PSMD and IRV voting rules. Next, we attempt to optimize 10 X 5 and 50 X 1 district plans for a larger number of higher-percentage Asian VAP districts. Lastly, we wrap up with some exploratory analysis of our findings. 
+
+The total number of election outcomes per-simulation is set by the district configuration:
+each ensemble subsamples 50 plans, every plan runs one election per district,
+and every district profile is regenerated across replicates of preference profiles to achieve more variation in ballot across trials. The 50 × 1
+configurations use 5 replicates while the 10-district configurations use 20, and
+every profile is generated under both voter models (Plackett-Luce and Bradley-Terry),
+so the count follows directly from the districts-per-plan, replicate count, and
+two voter models of each configuration:
+
+<p class="caption"><span class="fig-num">Table 6.</span> Number of election outcomes produced by each district configuration.</p>
+
+| District Configuration | Districts / Plan | Sampled Plans | Replicates | Voter Models | Election Outcomes |
+|---|---|---|---|---|---|
+| 50 × 1 | 50 | 50 | 5 | 2 | 25,000 |
+| 10 × 5 | 10 | 50 | 20 | 2 | 20,000 |
+| 10 × 3 | 10 | 50 | 20 | 2 | 20,000 |
 
 
-## Initial Results
+### 4.1 Comparison to 2019 Report - 10 X $m$ STV
 
-Figures below are from the current pipeline (updated cohesion matrix, full
-turnout except where noted, and per-district proportional candidate counts
-with noise). Six figure types are shown for each completed run: a **by-mode
-histogram** (distribution of citywide seats won by Asian-preferred candidates,
-one series per voter model, against the Asian share-of-VAP and combined-support
-reference lines), a **bubble plot** (the same distribution, sized by occurrence
-count, one row per voter model plus a pooled "Combined" row), a **by-slate
-panel** (the same by-mode histogram repeated once per candidate slate — White,
-Black, Latino, Asian — each against its own share-of-VAP and combined-support
-reference lines), a **coalition win-rate boxplot** (districts ranked by the
-focal group's VAP share, low to high, and pooled across sampled plans, with
-each box colored by how often that rank actually elected the group's preferred
-candidate), the same **coalition win-rate boxplot restricted to districts
-with an available candidate** (excluding districts where the focal slate was
-apportioned zero candidates and so could never win, regardless of VAP share),
-and a **coalition win-rate grid** (the unrestricted design repeated once per
-racial group in a 2×2 layout).
+![Grand comparison to the 2019 report](../figures/comparison.png)
 
-### Comparison to 2019 Report - 10 X 5 STV
+<p class="caption"><span class="fig-num">Figure 2.</span> Asian-preferred seat outcomes under the 10×5 and 10×3 STV configurations, compared against the 2019 study.</p>
 
+<div style="page-break-after: always;"></div>
 
+#### 10 × 5 STV
 
-### Basic – 50×1 Plurality
+<div class="scenario">
 
-<div class="figure-row">
-  <img src="../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_PLURALITY_bymode.png" alt="Basic by-mode histogram">
-  <img src="../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_bubbles_by_method.png" alt="Basic bubble plot">
+<img class="bubble-plot" src="../figures/10%20X%205%20STV/10%20X%205%20STV_10x50_bubbles_by_method.png" alt="10 X 5 STV bubble plot">
+<p class="caption"><span class="fig-num">Figure 3.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
+
+<img class="slate-panel" src="../figures/10%20X%205%20STV/10%20X%205%20STV_10x50_FASTSTV_byslate.png" alt="10 X 5 STV by-slate panel">
+<p class="caption"><span class="fig-num">Figure 4.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
+
+<img class="box-plot" src="../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot.png" alt="10 X 5 STV coalition box plot">
+<p class="caption"><span class="fig-num">Figure 5.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
 </div>
 
-![Basic by-slate panel](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_PLURALITY_byslate.png)
-
 <div style="page-break-after: always;"></div>
 
-![Basic coalition win-rate boxplot](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_A_slate_pl_coalition_boxplot.png)
+#### 10 × 3 STV
 
-![Basic coalition win-rate boxplot, districts with an available Asian candidate](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_A_slate_pl_coalition_boxplot_available.png)
+<div class="scenario">
 
-![Basic coalition win-rate grid](../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_slate_pl_coalition_boxplot_grid.png)
+<img class="bubble-plot" src="../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_bubbles_by_method.png" alt="10 X 3 STV bubble plot">
+<p class="caption"><span class="fig-num">Figure 6.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
 
-<div style="page-break-after: always;"></div>
+<img class="slate-panel" src="../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_FASTSTV_byslate.png" alt="10 X 3 STV by-slate panel">
+<p class="caption"><span class="fig-num">Figure 7.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
 
-### 10 × 5 STV
+<img class="box-plot" src="../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot.png" alt="10 X 3 STV coalition box plot">
+<p class="caption"><span class="fig-num">Figure 8.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
 
-<div class="figure-row">
-  <img src="../figures/10%20X%205%20STV/10%20X%205%20STV_10x50_FASTSTV_bymode.png" alt="10 X 5 STV by-mode histogram">
-  <img src="../figures/10%20X%205%20STV/10%20X%205%20STV_10x50_bubbles_by_method.png" alt="10 X 5 STV bubble plot">
 </div>
 
-![10 X 5 STV by-slate panel](../figures/10%20X%205%20STV/10%20X%205%20STV_10x50_FASTSTV_byslate.png)
-
 <div style="page-break-after: always;"></div>
 
-![10 X 5 STV coalition win-rate boxplot](../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot.png)
+### 4.2 Status Quo - 50 X 1 Plurality/IRV
 
-![10 X 5 STV coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot_available.png)
+#### 50 × 1 Plurality
 
-![10 X 5 STV coalition win-rate grid](../figures/10%20X%205%20STV/10%20X%205%20STV_10x5_slate_pl_coalition_boxplot_grid.png)
+<div class="scenario">
 
-<div style="page-break-after: always;"></div>
+<img class="bubble-plot" src="../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_bubbles_by_method.png" alt="Basic bubble plot">
+<p class="caption"><span class="fig-num">Figure 9.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
 
-### 10 × 3 STV
+<img class="slate-panel" src="../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_PLURALITY_byslate.png" alt="Basic by-slate panel">
+<p class="caption"><span class="fig-num">Figure 10.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
 
-<div class="figure-row">
-  <img src="../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_STV_bymode.png" alt="10 X 3 STV by-mode histogram">
-  <img src="../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_bubbles_by_method.png" alt="10 X 3 STV bubble plot">
+<img class="box-plot" src="../figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_A_slate_pl_coalition_boxplot.png" alt="Basic coalition box plot">
+<p class="caption"><span class="fig-num">Figure 11.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
 </div>
 
-![10 X 3 STV by-slate panel](../figures/10%20X%203%20STV/10%20X%203%20STV_10x30_STV_byslate.png)
-
 <div style="page-break-after: always;"></div>
 
-![10 X 3 STV coalition win-rate boxplot](../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot.png)
-
-![10 X 3 STV coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot_available.png)
-
-![10 X 3 STV coalition win-rate grid](../figures/10%20X%203%20STV/10%20X%203%20STV_10x3_slate_pl_coalition_boxplot_grid.png)
-
-<div style="page-break-after: always;"></div>
-
-### Low POC Turnout
-
-<div class="figure-row">
-  <img src="../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_FASTSTV_bymode.png" alt="Low POC Turnout by-mode histogram">
-  <img src="../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_bubbles_by_method.png" alt="Low POC Turnout bubble plot">
-</div>
-
-![Low POC Turnout by-slate panel](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_FASTSTV_byslate.png)
-
-<div style="page-break-after: always;"></div>
-
-![Low POC Turnout coalition win-rate boxplot](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot.png)
-
-![Low POC Turnout coalition win-rate boxplot, districts with an available Asian candidate](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot_available.png)
-
-![Low POC Turnout coalition win-rate grid](../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_slate_pl_coalition_boxplot_grid.png)
-
-<div style="page-break-after: always;"></div>
-
-### 10 × 5 STV - Asian Bloc Separate
-
-<div class="figure-row">
-  <img src="../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x50_FASTSTV_bymode.png" alt="Asian Bloc Separate by-mode histogram">
-  <img src="../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x50_bubbles_by_method.png" alt="Asian Bloc Separate bubble plot">
-</div>
-
-![Asian Bloc Separate by-slate panel](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x50_FASTSTV_byslate.png)
-
-<div style="page-break-after: always;"></div>
-
-![Asian Bloc Separate coalition win-rate boxplot](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x5_A_slate_pl_coalition_boxplot.png)
-
-![Asian Bloc Separate coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x5_A_slate_pl_coalition_boxplot_available.png)
-
-![Asian Bloc Separate coalition win-rate grid](../figures/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate/10%20X%205%20STV%20-%20Asian%20Bloc%20Separate_10x5_slate_pl_coalition_boxplot_grid.png)
-
-<div style="page-break-after: always;"></div>
-
-### 10 × 5 STV - Larger Asian Districts
-
-Gingleator short-burst optimized ensemble (`asian_optimized.json`), biasing the
-10-district chain toward higher-Asian-VAP-share districts instead of the neutral
-ReCom chain the other STV runs use.
-
-<div class="figure-row">
-  <img src="../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_STV_bymode.png" alt="10 X 5 STV Larger Asian Districts by-mode histogram">
-  <img src="../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_bubbles_by_method.png" alt="10 X 5 STV Larger Asian Districts bubble plot">
-</div>
-
-![10 X 5 STV Larger Asian Districts by-slate panel](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_STV_byslate.png)
-
-<div style="page-break-after: always;"></div>
-
-![10 X 5 STV Larger Asian Districts coalition win-rate boxplot](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot.png)
-
-![10 X 5 STV Larger Asian Districts coalition win-rate boxplot, districts with an available Asian candidate](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot_available.png)
-
-![10 X 5 STV Larger Asian Districts coalition win-rate grid](../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_slate_pl_coalition_boxplot_grid.png)
-
-<div style="page-break-after: always;"></div>
-
-### 50 × 1 IRV
+#### 50 × 1 IRV
 
 Single-member wards (neutral districting), elected by Instant-Runoff Voting
 instead of plurality — otherwise the same setup as Basic.
 
-<div class="figure-row">
-  <img src="../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_IRV_bymode.png" alt="50 X 1 IRV by-mode histogram">
-  <img src="../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_bubbles_by_method.png" alt="50 X 1 IRV bubble plot">
+<div class="scenario">
+
+<img class="bubble-plot" src="../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_bubbles_by_method.png" alt="50 X 1 IRV bubble plot">
+<p class="caption"><span class="fig-num">Figure 12.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
+
+<img class="slate-panel" src="../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_IRV_byslate.png" alt="50 X 1 IRV by-slate panel">
+<p class="caption"><span class="fig-num">Figure 13.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
+
+<img class="box-plot" src="../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_A_slate_pl_coalition_boxplot.png" alt="50 X 1 IRV coalition box plot">
+<p class="caption"><span class="fig-num">Figure 14.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
 </div>
 
-![50 X 1 IRV by-slate panel](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_IRV_byslate.png)
+<div style="page-break-after: always;"></div>
+
+### 4.3 Low Voter Turnout
+
+<div class="scenario">
+
+<img class="bubble-plot" src="../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_bubbles_by_method.png" alt="Low POC Turnout bubble plot">
+<p class="caption"><span class="fig-num">Figure 15.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
+
+<img class="slate-panel" src="../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_FASTSTV_byslate.png" alt="Low POC Turnout by-slate panel">
+<p class="caption"><span class="fig-num">Figure 16.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
+
+<img class="box-plot" src="../figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot.png" alt="Low POC Turnout coalition box plot">
+<p class="caption"><span class="fig-num">Figure 17.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
+</div>
 
 <div style="page-break-after: always;"></div>
 
-![50 X 1 IRV coalition win-rate boxplot](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_A_slate_pl_coalition_boxplot.png)
+### 4.4 Optimizing for Larger Asian VAP Districts
 
-![50 X 1 IRV coalition win-rate boxplot, districts with an available Asian candidate](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_A_slate_pl_coalition_boxplot_available.png)
+#### 10 × 5 STV - Larger Asian Districts
 
-![50 X 1 IRV coalition win-rate grid](../figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_slate_pl_coalition_boxplot_grid.png)
+Gingleator short-burst optimized ensemble, biasing the 10-district chain toward
+higher-Asian-VAP-share districts instead of the neutral ReCom chain the other STV
+runs use.
+
+<div class="scenario">
+
+<img class="bubble-plot" src="../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_bubbles_by_method.png" alt="10 X 5 STV Larger Asian Districts bubble plot">
+<p class="caption"><span class="fig-num">Figure 18.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
+
+<img class="slate-panel" src="../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_FASTSTV_byslate.png" alt="10 X 5 STV Larger Asian Districts by-slate panel">
+<p class="caption"><span class="fig-num">Figure 19.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
+
+<img class="box-plot" src="../figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot.png" alt="10 X 5 STV Larger Asian Districts coalition box plot">
+<p class="caption"><span class="fig-num">Figure 20.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
+</div>
 
 <div style="page-break-after: always;"></div>
 
-### 50 × 1 IRV - Larger Asian Districts
+#### 50 × 1 IRV - Larger Asian Districts
 
 Single-member wards, IRV, with the same Gingleator opportunity-district
-optimizer applied to the 50-district ensemble (`50-irv-asian-optimized.json`).
+optimizer applied to the 50-district ensemble.
 
-<div class="figure-row">
-  <img src="../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_IRV_bymode.png" alt="50 X 1 IRV Larger Asian Districts by-mode histogram">
-  <img src="../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png" alt="50 X 1 IRV Larger Asian Districts bubble plot">
+<div class="scenario">
+
+<img class="bubble-plot" src="../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png" alt="50 X 1 IRV Larger Asian Districts bubble plot">
+<p class="caption"><span class="fig-num">Figure 21.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
+
+<img class="slate-panel" src="../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_IRV_byslate.png" alt="50 X 1 IRV Larger Asian Districts by-slate panel">
+<p class="caption"><span class="fig-num">Figure 22.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
+
+<img class="box-plot" src="../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png" alt="50 X 1 IRV Larger Asian Districts coalition box plot">
+<p class="caption"><span class="fig-num">Figure 23.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
 </div>
 
-![50 X 1 IRV Larger Asian Districts by-slate panel](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_IRV_byslate.png)
-
 <div style="page-break-after: always;"></div>
 
-![50 X 1 IRV Larger Asian Districts coalition win-rate boxplot](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png)
-
-![50 X 1 IRV Larger Asian Districts coalition win-rate boxplot, districts with an available Asian candidate](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot_available.png)
-
-![50 X 1 IRV Larger Asian Districts coalition win-rate grid](../figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_slate_pl_coalition_boxplot_grid.png)
-
-<div style="page-break-after: always;"></div>
-
-### 50 × 1 PSMD - Larger Asian Districts
+#### 50 × 1 PSMD - Larger Asian Districts
 
 Single-member wards, Plurality (PSMD), with the Gingleator opportunity-district
-optimizer applied (`50-psmd-asian-optimized.json`) — the plurality counterpart
-to the IRV-optimized run above.
+optimizer applied — the plurality counterpart to the IRV-optimized run above.
 
-<div class="figure-row">
-  <img src="../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_PLURALITY_bymode.png" alt="50 X 1 PSMD Larger Asian Districts by-mode histogram">
-  <img src="../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png" alt="50 X 1 PSMD Larger Asian Districts bubble plot">
+<div class="scenario">
+
+<img class="bubble-plot" src="../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png" alt="50 X 1 PSMD Larger Asian Districts bubble plot">
+<p class="caption"><span class="fig-num">Figure 24.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</p>
+
+<img class="slate-panel" src="../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_PLURALITY_byslate.png" alt="50 X 1 PSMD Larger Asian Districts by-slate panel">
+<p class="caption"><span class="fig-num">Figure 25.</span> Seats won by each slate's preferred candidates — White, Black, Latino, and Asian — broken out by voter model.</p>
+
+<img class="box-plot" src="../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png" alt="50 X 1 PSMD Larger Asian Districts coalition box plot">
+<p class="caption"><span class="fig-num">Figure 26.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</p>
+
 </div>
 
-![50 X 1 PSMD Larger Asian Districts by-slate panel](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_PLURALITY_byslate.png)
-
 <div style="page-break-after: always;"></div>
 
-![50 X 1 PSMD Larger Asian Districts coalition win-rate boxplot](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png)
 
-![50 X 1 PSMD Larger Asian Districts coalition win-rate boxplot, districts with an available Asian candidate](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot_available.png)
+## Appendix
 
-![50 X 1 PSMD Larger Asian Districts coalition win-rate grid](../figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_slate_pl_coalition_boxplot_grid.png)
+### A. Configuration Reference
 
-<div style="page-break-after: always;"></div>
+<p class="caption"><span class="fig-num">Table 7.</span> Full list of simulated runs and their configuration parameters.</p>
+
+| Run Name | Districts | Seats | Voting Method | Voter Blocs | Turnout (bloc) |
+|---|---|---|---|---|---|
+| Basic – 50×1 Plurality | 50 × 1 | 50 | Plurality | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| Low POC Turnout | 10 × 5 | 50 | Single Transferable Vote (5 seats) | W-A, B, H | 0.75 / 0.50 / 0.50 |
+| 10 × 3 STV | 10 × 3 | 30 | Single Transferable Vote (3 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 10 × 5 STV | 10 × 5 | 50 | Single Transferable Vote (5 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 10 × 5 STV - Larger Asian Districts | 10 × 5 | 50 | Single Transferable Vote (5 seats) | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 50 × 1 IRV | 50 × 1 | 50 | Instant-Runoff Voting | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 50 × 1 IRV - Larger Asian Districts | 50 × 1 | 50 | Instant-Runoff Voting | W-A, B, H | 1.00 / 1.00 / 1.00 |
+| 50 × 1 PSMD - Larger Asian Districts | 50 × 1 | 50 | Plurality | W-A, B, H | 1.00 / 1.00 / 1.00 |

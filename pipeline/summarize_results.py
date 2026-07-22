@@ -1607,6 +1607,7 @@ def _per_mode_distribution_for_run(summary_csv: Path) -> Optional[pd.DataFrame]:
 def plot_combined_bubbles_all_runs(
     config,
     output_dir: Optional[Path] = None,
+    exclude_runs: Optional[List[str]] = None,
 ) -> Optional[Path]:
     """
     Compare every completed run in a single stacked bubble figure layout
@@ -1626,19 +1627,26 @@ def plot_combined_bubbles_all_runs(
             and the population-share reference line, which are shared across runs.
         output_dir: Where to write the figure. Defaults to
             outputs/cross_run_summaries/figures.
+        exclude_runs: Run names to leave out of the figure. Matched
+            case-insensitively as substrings of each run's ``run_name`` (so
+            "Asian Bloc Separate" drops "10 X 5 STV - Asian Bloc Separate").
 
     Returns:
         Path to the written figure, or None if no completed runs were found.
     """
     summary_paths = sorted(Path("outputs").glob("*/summaries/*_summary.csv"))
+    exclude_lower = [e.lower() for e in (exclude_runs or [])]
 
     runs: List[Tuple[Tuple[int, int, str], str, pd.DataFrame]] = []
     for path in summary_paths:
+        df_head = pd.read_csv(path, usecols=["run_name", "num_districts", "seats_per_district"])
+        label = str(df_head["run_name"].iloc[0])
+        if any(ex in label.lower() for ex in exclude_lower):
+            print(f"[summarize_results] Excluding run from cross-run bubble plot: {label}")
+            continue
         per_mode = _per_mode_distribution_for_run(path)
         if per_mode is None:
             continue
-        df_head = pd.read_csv(path, usecols=["run_name", "num_districts", "seats_per_district"])
-        label = str(df_head["run_name"].iloc[0])
         num_dist = int(df_head["num_districts"].min())
         seats_per_district = int(df_head["seats_per_district"].min())
         runs.append(((num_dist, seats_per_district, label), label, per_mode))
@@ -1706,15 +1714,14 @@ def plot_combined_bubbles_all_runs(
             row_max = sub["count"].max()
             row_scale = (BUBBLE_MAX_AREA - BUBBLE_MIN_AREA) / row_max if row_max > 0 else 0
             sizes = BUBBLE_MIN_AREA + sub["count"] * row_scale
-            bubble_color = COMBINED_BUBBLE_COLOR if mode == COMBINED_MODE else MODE_COLORS.get(mode, BUBBLE_COLOR)
             ax.scatter(
                 sub["focal_seats"],
                 [y_index[mode]] * len(sub),
                 s=sizes,
-                color=bubble_color,
+                color=MODE_COLORS.get(mode, BUBBLE_COLOR),
                 alpha=0.7,
-                edgecolor="none",
-                linewidth=0,
+                edgecolor="gray",
+                linewidth=0.5,
             )
 
         ax.axvline(i_share, color=PROP_LINE_COLOR, linestyle=":", linewidth=1.2)

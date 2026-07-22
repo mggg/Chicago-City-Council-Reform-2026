@@ -327,7 +327,7 @@ def main():
         print("="*100,f"\n Running {config["run_name"]}\n","="*20)
         run_pipeline(config)
 
-    plot_combined_bubbles_all_runs(config)
+    plot_combined_bubbles_all_runs(config, exclude_runs=["Asian Bloc Separate"])
     export_district_demographics_csv(config)
     plot_district_demographics(config["run_name"])
     for district_num in sorted(p.name for p in get_chain_out_dir(ensemble_signature(config)).iterdir() if p.name.isdigit()):

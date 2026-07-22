@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revisiting Reform Proposals for Chicago City Council</title>
+  <meta name="description" content="MGGG report revisiting reform proposals and alternative electoral systems for Chicago City Council, updated with 2020 Census data and current ward boundaries.">
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Google Fonts: MGGG identity -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+Pro:ital,wght@0,400;0,600;1,400&family=Source+Serif+Pro:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --mggg-blue: #0099cd;
+      --mggg-dark-blue: #006b9c;
+      --mggg-dark-gray: #666666;
+      --mggg-gray: #777777;
+      --mggg-light-gray: #f9f9f9;
+      --bs-link-color: var(--mggg-dark-blue);
+      --bs-link-hover-color: #00516f;
+    }
+    body {
+      font-family: "Source Serif Pro", Georgia, serif;
+      color: #1f2328;
+      scroll-behavior: smooth;
+    }
+    h1, h2, h3, h4, h5, h6, .navbar-brand {
+      font-family: "Playfair Display", Georgia, serif;
+      color: var(--mggg-dark-blue);
+    }
+    a { color: var(--mggg-dark-blue); }
+    a:hover { color: #00516f; }
+
+    .navbar-mggg { background-color: var(--mggg-dark-blue); }
+    .navbar-mggg .navbar-brand,
+    .navbar-mggg .nav-link { color: #fff; }
+    .navbar-mggg .nav-link:hover,
+    .navbar-mggg .nav-link.active { color: #d7f0fa; }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, var(--mggg-dark-blue), var(--mggg-blue));
+      color: #fff;
+    }
+    .hero h1 { color: #fff; }
+    .hero .lead { color: #eaf7fd; }
+
+    /* Section spacing / anchor offset for the sticky navbar */
+    section { scroll-margin-top: 70px; padding-top: .5rem; }
+    section > h2 {
+      border-bottom: 2px solid var(--mggg-light-gray);
+      padding-bottom: .3rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Table of contents sidebar */
+    .toc {
+      position: sticky;
+      top: 80px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      font-family: "Source Sans Pro", sans-serif;
+      font-size: .9rem;
+    }
+    .toc .nav-link { padding: .15rem 0; color: var(--mggg-dark-gray); border-left: 2px solid transparent; padding-left: .6rem; }
+    .toc .nav-link:hover { color: var(--mggg-dark-blue); }
+    .toc .nav-link.active { color: var(--mggg-dark-blue); font-weight: 600; border-left-color: var(--mggg-blue); }
+    .toc .nav .nav .nav-link { padding-left: 1.4rem; font-size: .85rem; }
+
+    /* Abstract */
+    .abstract-card {
+      background: var(--mggg-light-gray);
+      border-left: 4px solid var(--mggg-blue);
+    }
+
+    /* Figures */
+    figure.figure { display: block; width: 100%; text-align: center; }
+    .figure-img { max-height: 70vh; }
+    .figure-caption {
+      font-family: "Source Sans Pro", sans-serif;
+      font-style: italic;
+      font-size: .85rem;
+      color: var(--mggg-dark-gray);
+      margin-top: .4rem;
+    }
+    .fig-num { font-weight: 700; font-style: normal; color: var(--mggg-dark-blue); }
+
+    /* Tables */
+    table { font-family: "Source Sans Pro", sans-serif; font-size: .9rem; }
+    caption, .table-caption {
+      caption-side: top;
+      font-family: "Source Sans Pro", sans-serif;
+      font-style: italic;
+      font-size: .85rem;
+      color: var(--mggg-dark-gray);
+      text-align: center;
+      margin-bottom: .35rem;
+    }
+    thead th { background: var(--mggg-light-gray) !important; color: var(--mggg-dark-blue); }
+
+    /* Scenario accordions */
+    .accordion-button {
+      font-family: "Playfair Display", serif;
+      font-size: 1.05rem;
+      color: var(--mggg-dark-blue);
+    }
+    .accordion-button:not(.collapsed) {
+      background-color: #e6f4fb;
+      color: var(--mggg-dark-blue);
+      box-shadow: inset 0 -1px 0 rgba(0,107,156,.2);
+    }
+    .accordion-button:focus { box-shadow: 0 0 0 .2rem rgba(0,153,205,.25); }
+
+    /* Scenario figure tabs */
+    .nav-tabs { border-bottom-color: #dee2e6; }
+    .nav-tabs .nav-link {
+      font-family: "Source Sans Pro", sans-serif;
+      font-size: .9rem;
+      color: var(--mggg-dark-gray);
+      border: none;
+      border-bottom: 2px solid transparent;
+    }
+    .nav-tabs .nav-link:hover { color: var(--mggg-dark-blue); border-bottom-color: rgba(0,153,205,.4); }
+    .nav-tabs .nav-link.active {
+      color: var(--mggg-dark-blue);
+      font-weight: 600;
+      background: transparent;
+      border-bottom: 2px solid var(--mggg-blue);
+    }
+
+    /* Zoomable figures + lightbox */
+    img.zoomable { cursor: zoom-in; transition: box-shadow .15s ease; }
+    img.zoomable:hover { box-shadow: 0 0 0 3px rgba(0,153,205,.35); }
+    #lightbox .modal-content { background: transparent; }
+    #lightbox-img { max-height: 90vh; }
+
+    .footnote { font-size: .85rem; color: var(--mggg-dark-gray); }
+    footer { background: var(--mggg-light-gray); font-family: "Source Sans Pro", sans-serif; }
+
+    /* Back to top */
+    #toTop {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; display: none; z-index: 1030;
+    }
+  </style>
+
+  <!-- MathJax for LaTeX -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" id="MathJax-script" async></script>
+</head>
+
+<body data-bs-spy="scroll" data-bs-target="#toc-nav" data-bs-offset="90" tabindex="0">
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-mggg sticky-top shadow-sm">
+    <div class="container-xl">
+      <a class="navbar-brand fw-bold" href="#top">Chicago City Council Reform</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="mainNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="#background">Background</a></li>
+          <li class="nav-item"><a class="nav-link" href="#data">Data</a></li>
+          <li class="nav-item"><a class="nav-link" href="#methodology">Methodology</a></li>
+          <li class="nav-item"><a class="nav-link" href="#scenarios">Scenarios</a></li>
+          <li class="nav-item"><a class="nav-link" href="#appendix">Appendix</a></li>
+          <li class="nav-item"><a class="nav-link" href="https://github.com/mggg/Chicago-City-Council-Reform-2026" target="_blank" rel="noopener">GitHub ↗</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header class="hero py-5" id="top">
+    <div class="container-xl">
+      <p class="text-uppercase mb-2" style="letter-spacing:.12em; font-family:'Source Sans Pro',sans-serif; font-size:.8rem; color:#d7f0fa;">Metric Geometry &amp; Gerrymandering Group</p>
+      <h1 class="display-5 fw-bold">Revisiting Reform Proposals for Chicago City Council</h1>
+      <p class="lead mb-0">Updating MGGG's 2019 study with 2020 Census data, current ward boundaries, and modern election-modeling tools.</p>
+    </div>
+  </header>
+
+  <div class="container-xl my-4">
+    <div class="row">
+      <!-- Sidebar TOC -->
+      <div class="col-lg-3 d-none d-lg-block">
+        <nav id="toc-nav" class="toc nav flex-column">
+          <a class="nav-link" href="#abstract">Abstract</a>
+          <a class="nav-link" href="#background">1. Background</a>
+          <a class="nav-link" href="#data">2. Data</a>
+          <nav class="nav flex-column">
+            <a class="nav-link" href="#data-units">2.1 Data units &amp; preprocessing</a>
+            <a class="nav-link" href="#demographics">2.2 Racial demographics</a>
+          </nav>
+          <a class="nav-link" href="#methodology">3. Methodology</a>
+          <nav class="nav flex-column">
+            <a class="nav-link" href="#ensembles">3.1 Districting ensembles</a>
+            <a class="nav-link" href="#blocs">3.2 Voter blocs &amp; slates</a>
+            <a class="nav-link" href="#candidates">3.3 Candidate availability</a>
+            <a class="nav-link" href="#ballots">3.4 Ballot generation</a>
+            <a class="nav-link" href="#voting-rules">3.5 Voting rules</a>
+          </nav>
+          <a class="nav-link" href="#scenarios">4. Election Scenarios</a>
+          <nav class="nav flex-column">
+            <a class="nav-link" href="#comparison-2019">4.1 Comparison to 2019</a>
+            <a class="nav-link" href="#status-quo">4.2 Status quo</a>
+            <a class="nav-link" href="#low-turnout">4.3 Low voter turnout</a>
+            <a class="nav-link" href="#optimizing">4.4 Optimizing for Asian VAP</a>
+          </nav>
+          <a class="nav-link" href="#appendix">Appendix A. Configurations</a>
+        </nav>
+      </div>
+
+      <!-- Main content -->
+      <main class="col-lg-9">
+
+        <!-- Abstract -->
+        <section id="abstract">
+          <div class="card abstract-card shadow-sm mb-4">
+            <div class="card-body">
+              <h2 class="h4 card-title">Abstract</h2>
+              <p class="card-text mb-0">In April 2019, the Metric Geometry and Gerrymandering Group published a study on reform proposals and alternative electoral systems for Chicago City Council, stating that many observers would agree that Chicago's City Council ward system is entrenched in problematic gerrymandering, segregation, and inefficiency &mdash; issues many would argue still persist today. The goal of the 2019 study was to apply mathematical models to analyze the then-active ward plan and propose reforms to address these problems. This report seeks to replicate and update the results of the 2019 study by using the more current ward plan, newer demographic data, and more refined techniques that the lab has since developed. We will additionally be examining the impacts of the included reform proposals on representation for Asian voters &mdash; a voting bloc that has consistently gone underrepresented in Chicago City Council.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 1. Background -->
+        <section id="background" class="mb-5">
+          <h2>1. Background</h2>
+          <p>The Chicago city council&mdash;both then and now&mdash;elects council members (alderpersons) from <strong>50 single-member districts (wards)</strong> using a runoff system that sees the top two vote-getters in a general election face each other in a runoff election if no candidate has secured a majority vote in the general. Since 2019, Chicago has had another city council election in 2023 in which [xx] new members were elected to city council. It was also the first city-wide election to use the new district maps drawn up after the latest decennial census in 2020. Combined with the shifting demographics and geography of the city, we thought it worthwhile to revisit the 2019 report and apply more mature methods to an analysis of Chicago city council elections.</p>
+          <p>This report employs new and updated tools like GerryChain and VoteKit in order to simulate a variety of electoral systems and scenarios &mdash; both from the original report and more novel configurations. Primarily, we look at simulations of multi-member districts elected by <strong>Single Transferable Vote (STV)</strong>, low person-of-color turnout, and optimizing for larger Asian bloc percentage-share in both 50 and 10 district plans.</p>
+        </section>
+
+        <!-- 2. Data -->
+        <section id="data" class="mb-5">
+          <h2>2. Data</h2>
+
+          <h3 class="h4 mt-4" id="data-units">2.1 Data units, collection, preprocessing</h3>
+          <p>In this report, we have updated our demographic data source to use the 2020 Decennial Census from the United State Census Bureau &mdash; the 2019 report utilized the 2010 Decennial Census. The census provides census block-level data. Out of the 98,230 blocks located in Cook County, 38,785 of these fall within Chicago city boundaries. Before we generate our mapping ensemble, we aggregate data from census blocks up into ward precincts to serve as the base geographic unit.</p>
+          <p>Shapefile data for Chicago's wards and precincts has been obtained from the <a href="https://data.cityofchicago.org/Facilities-Geographic-Boundaries/Boundaries-Ward-Precincts-2025-/i8fv-xe4b/about_data" target="_blank" rel="noopener">Chicago Open Data Portal</a>. By December 1 in the year following the release of every Decennial Census, Chicago's ward boundaries must be redrawn to reflect the population as demonstrated in the census. We use the most recent ward and precinct boundaries, which were redrawn on May 16, 2022. It is notable that while the overall count of 50 wards across the city remains the same, the total number of <a href="https://news.wttw.com/2022/08/29/chicago-board-elections-shrinks-number-precincts-nearly-40" target="_blank" rel="noopener">precincts has dropped</a> from 2069 to 1291 &mdash; a significant decrease of nearly 40%.<sup><a href="#fn1" id="fnref1">[1]</a></sup></p>
+
+          <h3 class="h4 mt-4" id="demographics">2.2 Racial demographics and population shifts</h3>
+          <p>This report mirrors the 2019 study in how it manages distinctions between racial demographics: Black referring to Black non-Hispanic population, White for White non-Hispanic, Asian for Asian non-Hispanic, and Hispanic/Latino for all people designated with the Hispanic ethnicity in the census regardless of race.</p>
+
+          <p class="table-caption"><span class="fig-num">Table 1.</span> Chicago population by race and ethnicity across census and ACS vintages.</p>
+          <div class="table-responsive mb-4">
+            <table class="table table-bordered table-sm align-middle">
+              <thead><tr><th>Race</th><th>2000 (Census)</th><th>2010 (Census)</th><th>2009-2013 (ACS)</th><th>2013-2017 (ACS)</th><th>2020 (Census)</th></tr></thead>
+              <tbody>
+                <tr><td>Black (non-Hispanic)</td><td>36.4%</td><td>32.4%</td><td>31.9%</td><td>30.1%</td><td>28.7%</td></tr>
+                <tr><td>White (non-Hispanic)</td><td>31.3%</td><td>31.7%</td><td>32.2%</td><td>32.7%</td><td>31.4%</td></tr>
+                <tr><td>Hispanic</td><td>26.0%</td><td>28.9%</td><td>28.7%</td><td>29.0%</td><td>29.8%</td></tr>
+                <tr><td>Asian (non-Hispanic)</td><td>4.3%</td><td>5.4%</td><td>5.7%</td><td>6.2%</td><td>6.9%</td></tr>
+                <tr><td>Two or More Races</td><td>1.6%</td><td>1.3%</td><td>1.3%</td><td>1.7%</td><td>2.6%</td></tr>
+                <tr><td>Amer. Indian/Alaska Native</td><td>0.1%</td><td>0.2%</td><td>0.1%</td><td>0.1%</td><td>0.1%</td></tr>
+                <tr><td>Some Other Race</td><td>0.1%</td><td>0.2%</td><td>0.2%</td><td>0.2%</td><td>0.4%</td></tr>
+                <tr><td>Nat. Hawaiian/Pacific Islander</td><td>0.03%</td><td>0.02%</td><td>0.02%</td><td>0.02%</td><td>0.02%</td></tr>
+                <tr><td>Total Population</td><td>2,896,016</td><td>2,695,598</td><td>2,706,101</td><td>2,716,450</td><td>2,746,424</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Notable here is the slight growth in share for both the Hispanic and Asian populations &mdash; and the sizeable decrease of the Black share of the population, around a 3.7% decrease since the 2010 census. While neighborhood and community demographic makeup in the city continues to change, Chicago remains highly segregated, with 287 voting precincts being more than 80% Black and 116 being more than 80% Hispanic. At the time time, 805 precincts are less than 20% Black, and 744 are less than 20% Hispanic.</p>
+
+          <p class="table-caption"><span class="fig-num">Table 2.</span> Number of Chicago precincts falling in each band of population share, by racial/ethnic group.</p>
+          <div class="table-responsive mb-4">
+            <table class="table table-bordered table-sm align-middle">
+              <thead><tr><th>Precincts (1,291 total)</th><th>0-20%</th><th>20-40%</th><th>40-60%</th><th>60-80%</th><th>80-100%</th></tr></thead>
+              <tbody>
+                <tr><td>White</td><td>588</td><td>165</td><td>211</td><td>269</td><td>57</td></tr>
+                <tr><td>Black</td><td>805</td><td>73</td><td>55</td><td>70</td><td>287</td></tr>
+                <tr><td>Hispanic</td><td>744</td><td>201</td><td>134</td><td>95</td><td>116</td></tr>
+                <tr><td>Asian</td><td>1,187</td><td>85</td><td>11</td><td>4</td><td>3</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <hr>
+          <p class="footnote" id="fn1"><sup>[1]</sup> The Chicago Board of Elections cites that efficiency concerns, along with the continued popularity of mail-in ballots following the COVID-19 pandemic, are the primary driver in decreasing the overall number of precincts &mdash; and therefore polling places. We believe this is important to note, as polling place availability and accessibility (or lackthereof) is a known historical determinant in electoral disenfranchisement and representation. <a href="#fnref1">&#8617;</a></p>
+        </section>
+
+        <!-- 3. Methodology -->
+        <section id="methodology" class="mb-5">
+          <h2>3. Methodology</h2>
+
+          <h3 class="h4 mt-4" id="ensembles">3.1 Districting Plan Ensembles</h3>
+          <p>To generate a sufficient number of distinct districting plans, we use GerryChain to run a 10,000-step ReCom chain and subsample 50 plans that will be used in our election simulations. We do this a total of four times &mdash; once for each of the following configurations:</p>
+          <ul>
+            <li>50 &times; 1 ensemble &mdash; each plan has 50 single-member districts built from precincts</li>
+            <li>10 &times; <em>$m$</em> ensemble &mdash; each plan has 10 multi-member districts built from precincts</li>
+            <li>50 &times; 1 optimized ensemble &mdash; each plan has 50 single-member districts built from precincts, but we attempt to sample plans that have a higher number of districts with an Asian population over 20%.</li>
+            <li>10 &times; <em>$m$</em> optimized ensemble &mdash; each plan has 10 multi-member districts built from precincts, but we attempt to sample plans that have a higher number of districts with an Asian population over 15%.</li>
+          </ul>
+          <p>Given that Asian voters have been consistently underpresented within Chicago's city council, a goal of the report is to understand the conditions under which proportional representation could be achieved &mdash; including intentional redistricting to optimize for more wards with larger Asian populations. We accomplish this by using the Gingleator optimizer within the GerryChain library. The optimizer will perform &ldquo;short bursts&rdquo; of 100 steps to identify and select a plan according to a provided scoring function and target population threshold. We use the default score function that simply keeps track of plans with the highest number of districts that meet our threshold criteria. In the case of 50 district plans, we set that threshold at 20%, and in 10 district plans we set it at 15%.</p>
+
+          <h3 class="h4 mt-4" id="blocs">3.2 Voter Blocs and Candidate Slates</h3>
+          <p>Mirroring the 2019 report, we consider the four largest racial demographic groups when identifying blocs of voters with shared preferences and slates of candidates with similar policies and positions. Slates are limited to and delineated by Black, Asian, Hispanic, and White candidates. Voter blocs follow this with a major exception: we made the decision to combine White and Asian voters into a single bloc. The reasoning for this is guided by evidence that Asian and White voters in Chicago demonstrate similar behaviors and preferences at the ballot box, particularly when looking at the last several mayoral and city council elections. While there currently exists no expansive data sets or analysis examining Asian voting behavior in Chicago elections, a handful of examples do exist: MGGG's previous application of Goodman's Ecological Regression on [add source here] and <a href="https://uofi.app.box.com/s/g2wlv9836atormomsn64alse2ysapjrd" target="_blank" rel="noopener">Greater Cities Institute's</a> application of ecological inference on voters in the 2023 mayoral election. Considering the similarities in behavior between the two blocs, we model them as a single bloc for the purposes of this analysis.</p>
+
+          <h3 class="h4 mt-4" id="candidates">3.3 Candidate Availability and Pool Size</h3>
+          <p>To simulate candidate availability per-ward for each voting bloc, we make a few decisions and assumptions guided by available evidence from previous Chicago general city council elections. The first is deciding how many total candidates will be on the ballot for a given ward. In 2023, the average number of candidates running across all 50 wards (not counting write-ins) was approximately 3.48, with a large number of wards featuring anywhere between one to four candidates in the election, and fewer featuring counts larger than five.</p>
+
+          <figure class="figure d-block text-center my-4">
+            <img src="assets/candidates-by-ward.png" class="figure-img img-fluid rounded border zoomable" alt="2023 Candidate Counts by Ward">
+            <figcaption class="figure-caption"><span class="fig-num">Figure 1.</span> Number of candidates per ward in the 2023 Chicago City Council general election (write-ins excluded).</figcaption>
+          </figure>
+
+          <p>To model this in our simulation, we sample from the geometric distribution. For 50 district configurations, we use a probability value of $0.2$, which provides an expected value of $5$ &mdash; slightly above the average total candidates running per district in 2023. For 10 district configurations, we use a probability value of $0.1$, which provides an expected value of $10$. Generally, we'd expected plans with larger districts to see more candidates pursuing seats on council. We sample in this way for every single district in every subsample of the districting ensemble, allowing some variance in total available candidates across districts and plans. However, because generating values in this way could result in a candidate pool size that is large enough to be unrealistic (and computationally expensive,) we set a cap on the total candidates by making a calculation with the district VAP:</p>
+          <p>$$Max\ Candidates = \lceil log_{10}(District\ VAP) \rceil$$</p>
+          <p>The application of the logarithmic function with each district's VAP as input serves to mirror the maximum observed candidates in the 2023 general election &mdash; 11 candidates in both Ward 5 and Ward 6. Since each ward in the existing 50 district maps contains an average of 44,000 constituents in the voting age population, this calculation will result in 11 total candidates. Using the same formula, maps with 10 districts will be expected to see a cap of 13 candidates &mdash; the reasoning here that larger districts with more seats available would see a larger candidate pool with the size limited by the willingness or ability of would-be candidates to persist their campaigns until election day. Our &ldquo;floor&rdquo; minimum value is trival by comparison &mdash; here we set a minimum value <em>$m$</em> that is equal to the number of seats per district, so we never allow a sampled number to be lower than the per-district seats.</p>
+          <p>Next, we make an assumption that the racial composition of the slate pool will be roughly proportional to that of the VAP in each district. Using the bloc proportions to create an interval with the intent to sample candidates of different slates from this interval. However, before we do we first square each element, normalizing the &ldquo;squared interval&rdquo; over the sum of the squared values. This creates an &ldquo;exaggeration&rdquo; effect when we sample slate candidates. In other words, if a district has a large Black VAP, it's even more likely that the Black voter-preferred slate of candidates will be larger than the others. Similarly, if the Asian VAP is small it's much less likely that the Asian voter-preferred slate will have many candidates &mdash; if any, since we allow for slates to be empty. This is intended to model how community dynamics, segregation, or lack of institutional support may impact candidate availability across geography with respect to race.</p>
+
+          <h3 class="h4 mt-4" id="ballots">3.4 Voter Profile and Ballot Generation</h3>
+          <p>For each district in all 50 district plans of our ensemble, we generate voter preference profiles &mdash; a collection ballots from voters that rank available candidates. These rankings are determined by using VoteKit's Plackett-Luce and Bradley-Terry ballot generators, which model impulsive voter behavior and deliberative voter behavior, respectively. Each assumes that each voter bloc has a preference interval for each slate of candidates, along with tuple of cohesion parameters &mdash; one parameter for each slate.</p>
+          <p>Both generators share the same two-stage process, and they only differ in how the first stage plays out. Before any ballots are drawn, each bloc's preference interval is assembled by taking that bloc's cohesion for a given slate and slicing off a sub-interval of that width, then filling it in with the individual candidates of the slate according to their support. We govern the within-slate split with a set of Dirichlet alphas &mdash; in this report we hold all alphas at 1, which means that once a voter has decided to reach for a particular slate, every candidate on that slate is treated as equally preferred. The cohesion parameters (the rows of the matrices below) therefore do all the work of ordering <em>slates</em> against one another, while the interval handles the ordering of candidates <em>within</em> a slate. What separates the two models is the story we tell about how a voter walks through that interval to produce a ranking.</p>
+
+          <h4 class="h5 mt-3">The Impulsive Voter</h4>
+          <p>The Plackett-Luce generator builds a ballot from the top down, one position at a time. Starting from the first-place slot, a voter in bloc $X$ reaches for a candidate from slate $S$ with probability equal to that bloc's cohesion for the slate, $\pi_{X,S}$; whichever slate is chosen then supplies a specific candidate by sampling from that slate's preference interval without replacement. The voter repeats this for the next position, renormalizing over whatever slates still have candidates left, and keeps going until the ballot is full. We call this the <em>impulsive</em> voter because they never look back &mdash; each ranking is a snapshot decision made in the moment, with no reconsideration of the choices already committed higher up the ballot. Concretely, a voter picks their favorite, then their next favorite from what remains, and so on, so the probability of a given slate ordering is just the product of these sequential draws.</p>
+
+          <h4 class="h5 mt-3">The Deliberative Voter</h4>
+          <p>The Bradley-Terry generator instead asks the voter to weigh the ballot as a whole. Rather than filling positions in sequence, the probability of a complete ranking is proportional to the product of the pairwise slate preferences across <em>every</em> pair of slates on the ballot &mdash; for a ranking that places slate $S_i$ above slate $S_j$, each such head-to-head contributes a factor of $\pi_{X,S_i} / (\pi_{X,S_i} + \pi_{X,S_j})$. A voter effectively runs every candidate against every other in their head and only then settles on the ordering that is most internally consistent with all of those matchups at once. We call this the <em>deliberative</em> voter, since the ranking reflects a considered comparison of the full field rather than a run of top-down impulses. The candidate-filling stage is identical to Plackett-Luce &mdash; once the slate ordering is fixed, specific candidates are drawn from each slate's preference interval &mdash; so the two models diverge only in how much of the ballot a voter is imagined to be considering at once.</p>
+
+          <h4 class="h5 mt-3">Cohesion Matrices</h4>
+          <p>Rows are voter blocs, columns are candidate slates; each row sums to 1.</p>
+          <p><strong>Standard 3-bloc:</strong></p>
+          <p class="table-caption"><span class="fig-num">Table 3.</span> Standard three-bloc cohesion matrix: each voter bloc's support split across the candidate slates (rows sum to 1).</p>
+          <div class="table-responsive mb-3">
+            <table class="table table-bordered table-sm align-middle text-center">
+              <thead><tr><th>bloc &darr; / slate &rarr;</th><th>White</th><th>Asian</th><th>Black</th><th>Hispanic</th></tr></thead>
+              <tbody>
+                <tr><th>White-Asian</th><td>0.61</td><td>0.22</td><td>0.13</td><td>0.04</td></tr>
+                <tr><th>Black</th><td>0.05</td><td>0.10</td><td>0.75</td><td>0.10</td></tr>
+                <tr><th>Hispanic</th><td>0.15</td><td>0.05</td><td>0.05</td><td>0.75</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The <code>White-Asian</code> row is the VAP-weighted average (81% White / 19% Asian) of the underlying White and Asian rows (below).</p>
+
+          <p class="table-caption"><span class="fig-num">Table 4.</span> Four-bloc cohesion matrix with White and Asian voters modeled as separate blocs (rows sum to 1).</p>
+          <div class="table-responsive mb-3">
+            <table class="table table-bordered table-sm align-middle text-center">
+              <thead><tr><th>bloc &darr; / slate &rarr;</th><th>White</th><th>Asian</th><th>Black</th><th>Hispanic</th></tr></thead>
+              <tbody>
+                <tr><th>White</th><td>0.70</td><td>0.10</td><td>0.15</td><td>0.05</td></tr>
+                <tr><th>Asian</th><td>0.20</td><td>0.75</td><td>0.03</td><td>0.02</td></tr>
+                <tr><th>Black</th><td>0.05</td><td>0.10</td><td>0.75</td><td>0.10</td></tr>
+                <tr><th>Hispanic</th><td>0.15</td><td>0.05</td><td>0.05</td><td>0.75</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The cohesion parameters here have been selected based on available estimates (from ecological regression) from the earlier 2019 MGGG study on Chicago city council reform, as well as a mayoral election analysis from the Greater Cities Institute.</p>
+
+          <h3 class="h4 mt-4" id="voting-rules">3.5 Voting Rules</h3>
+          <p>Elections for each district are simulated using VoteKit's Elections module. We use the following voting rules with the corresponding district configurations:</p>
+          <p class="table-caption"><span class="fig-num">Table 5.</span> Voting rules used in the report and the district configurations they are applied to.</p>
+          <div class="table-responsive mb-3">
+            <table class="table table-bordered table-sm align-middle">
+              <thead><tr><th>Voting Rule</th><th>District Configs</th><th>Seats/District</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Plurality</strong></td><td>50 &times; 1</td><td>1 (single-winner)</td><td>Voters' first choices are tallied and the candidate with the most votes wins outright &mdash; no majority required. This is the closest to Chicago's current status-quo.</td></tr>
+                <tr><td><strong>IRV</strong> (Instant-Runoff Voting)</td><td>50 &times; 1</td><td>1 (single-winner)</td><td>The single-winner case of STV: last-place candidates are eliminated round by round and their ballots transferred to the next-ranked choice until one candidate holds a majority.</td></tr>
+                <tr><td><strong>STV</strong> (Single Transferable Vote)</td><td>10 &times; 5, 10 &times; 3</td><td>5 or 3 (multi-winner)</td><td>Multi-winner ranked-choice rule using the Droop quota: candidates reaching the quota are elected and their surplus is redistributed, while last-place candidates are eliminated and transferred, until all seats are filled.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>For each system, tiebreaks are performed randomly when needed.</p>
+        </section>
+
+        <!-- 4. Election Scenarios -->
+        <section id="scenarios" class="mb-5">
+          <h2>4. Election Scenarios</h2>
+          <p>In the following sections, we highlight the results of a number of electoral scenarios that were simulated using the methodology described earlier. We first draw a comparison to the results of the original 2019 study using 10 &times; 5 STV and 10 &times; 3 STV. Then, we simulate Chicago's current status quo using 50-district maps with PSMD and IRV voting rules. Next, we attempt to optimize 10 &times; 5 and 50 &times; 1 district plans for a larger number of higher-percentage Asian VAP districts. Lastly, we wrap up with some exploratory analysis of our findings.</p>
+          <p>The total number of election outcomes per-simulation is set by the district configuration: each ensemble subsamples 50 plans, every plan runs one election per district, and every district profile is regenerated across replicates of preference profiles to achieve more variation in ballot across trials. The 50 &times; 1 configurations use 5 replicates while the 10-district configurations use 20, and every profile is generated under both voter models (Plackett-Luce and Bradley-Terry), so the count follows directly from the districts-per-plan, replicate count, and two voter models of each configuration:</p>
+          <p class="table-caption"><span class="fig-num">Table 6.</span> Number of election outcomes produced by each district configuration.</p>
+          <div class="table-responsive mb-4">
+            <table class="table table-bordered table-sm align-middle text-center">
+              <thead><tr><th>District Configuration</th><th>Districts / Plan</th><th>Sampled Plans</th><th>Replicates</th><th>Voter Models</th><th>Election Outcomes</th></tr></thead>
+              <tbody>
+                <tr><td>50 &times; 1</td><td>50</td><td>50</td><td>5</td><td>2</td><td>25,000</td></tr>
+                <tr><td>10 &times; 5</td><td>10</td><td>50</td><td>20</td><td>2</td><td>20,000</td></tr>
+                <tr><td>10 &times; 3</td><td>10</td><td>50</td><td>20</td><td>2</td><td>20,000</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 4.1 -->
+          <h3 class="h4 mt-4" id="comparison-2019">4.1 Comparison to 2019 Report &mdash; 10 &times; <em>$m$</em> STV</h3>
+          <figure class="figure d-block text-center my-4">
+            <img src="figures/comparison.png" class="figure-img img-fluid rounded border zoomable" alt="Grand comparison to the 2019 report">
+            <figcaption class="figure-caption"><span class="fig-num">Figure 2.</span> Asian-preferred seat outcomes under the 10&times;5 and 10&times;3 STV configurations, compared against the 2019 study.</figcaption>
+          </figure>
+
+          <div class="accordion mb-4">
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#sc-1" aria-expanded="false" aria-controls="sc-1">10 &times; 5 STV</button>
+  </h4>
+  <div id="sc-1" class="accordion-collapse collapse show">
+    <div class="accordion-body"><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab1-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab1-bubble" type="button" role="tab" aria-controls="tab1-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab1-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab1-byslate" type="button" role="tab" aria-controls="tab1-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab1-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab1-winrate" type="button" role="tab" aria-controls="tab1-winrate" aria-selected="false">Coalition win-rate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab1-fpv-btn" data-bs-toggle="tab" data-bs-target="#tab1-fpv" type="button" role="tab" aria-controls="tab1-fpv" aria-selected="false">First-choice vote</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab1-bubble" role="tabpanel" aria-labelledby="tab1-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV/10%20X%205%20STV_10x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 3.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab1-byslate" role="tabpanel" aria-labelledby="tab1-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV/10%20X%205%20STV_10x50_FASTSTV_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 4.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab1-winrate" role="tabpanel" aria-labelledby="tab1-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 5.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div><div class="tab-pane fade" id="tab1-fpv" role="tabpanel" aria-labelledby="tab1-fpv-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV/10%20X%205%20STV_10x5_A_slate_pl_coalition_boxplot_fpv_share.png" class="figure-img img-fluid rounded border zoomable" alt="First-choice vote chart"><figcaption class="figure-caption"><span class="fig-num">Figure 6.</span> First-choice vote share for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-2" aria-expanded="false" aria-controls="sc-2">10 &times; 3 STV</button>
+  </h4>
+  <div id="sc-2" class="accordion-collapse collapse">
+    <div class="accordion-body"><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab2-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab2-bubble" type="button" role="tab" aria-controls="tab2-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab2-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab2-byslate" type="button" role="tab" aria-controls="tab2-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab2-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab2-winrate" type="button" role="tab" aria-controls="tab2-winrate" aria-selected="false">Coalition win-rate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab2-fpv-btn" data-bs-toggle="tab" data-bs-target="#tab2-fpv" type="button" role="tab" aria-controls="tab2-fpv" aria-selected="false">First-choice vote</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab2-bubble" role="tabpanel" aria-labelledby="tab2-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%203%20STV/10%20X%203%20STV_10x30_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 7.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab2-byslate" role="tabpanel" aria-labelledby="tab2-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%203%20STV/10%20X%203%20STV_10x30_FASTSTV_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 8.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab2-winrate" role="tabpanel" aria-labelledby="tab2-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 9.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div><div class="tab-pane fade" id="tab2-fpv" role="tabpanel" aria-labelledby="tab2-fpv-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%203%20STV/10%20X%203%20STV_10x3_A_slate_pl_coalition_boxplot_fpv_share.png" class="figure-img img-fluid rounded border zoomable" alt="First-choice vote chart"><figcaption class="figure-caption"><span class="fig-num">Figure 10.</span> First-choice vote share for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+</div>
+
+          <!-- 4.2 -->
+          <h3 class="h4 mt-4" id="status-quo">4.2 Status Quo &mdash; 50 &times; 1 Plurality/IRV</h3>
+
+          <div class="accordion mb-4">
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-3" aria-expanded="false" aria-controls="sc-3">50 &times; 1 Plurality</button>
+  </h4>
+  <div id="sc-3" class="accordion-collapse collapse">
+    <div class="accordion-body"><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab3-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab3-bubble" type="button" role="tab" aria-controls="tab3-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab3-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab3-byslate" type="button" role="tab" aria-controls="tab3-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab3-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab3-winrate" type="button" role="tab" aria-controls="tab3-winrate" aria-selected="false">Coalition win-rate</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab3-bubble" role="tabpanel" aria-labelledby="tab3-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 11.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab3-byslate" role="tabpanel" aria-labelledby="tab3-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x50_PLURALITY_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 12.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab3-winrate" role="tabpanel" aria-labelledby="tab3-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/Basic%20-%2050%20X%201%20Plurality/Basic%20-%2050%20X%201%20Plurality_50x1_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 13.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-4" aria-expanded="false" aria-controls="sc-4">50 &times; 1 IRV</button>
+  </h4>
+  <div id="sc-4" class="accordion-collapse collapse">
+    <div class="accordion-body"><p>Single-member wards (neutral districting), elected by Instant-Runoff Voting instead of plurality &mdash; otherwise the same setup as Basic.</p><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab4-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab4-bubble" type="button" role="tab" aria-controls="tab4-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab4-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab4-byslate" type="button" role="tab" aria-controls="tab4-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab4-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab4-winrate" type="button" role="tab" aria-controls="tab4-winrate" aria-selected="false">Coalition win-rate</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab4-bubble" role="tabpanel" aria-labelledby="tab4-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 14.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab4-byslate" role="tabpanel" aria-labelledby="tab4-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20IRV/50%20X%201%20IRV_50x50_IRV_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 15.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab4-winrate" role="tabpanel" aria-labelledby="tab4-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20IRV/50%20X%201%20IRV_50x1_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 16.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+</div>
+
+          <!-- 4.3 -->
+          <h3 class="h4 mt-4" id="low-turnout">4.3 Low Voter Turnout</h3>
+          <div class="accordion mb-4">
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-5" aria-expanded="false" aria-controls="sc-5">Low Voter Turnout</button>
+  </h4>
+  <div id="sc-5" class="accordion-collapse collapse">
+    <div class="accordion-body"><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab5-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab5-bubble" type="button" role="tab" aria-controls="tab5-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab5-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab5-byslate" type="button" role="tab" aria-controls="tab5-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab5-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab5-winrate" type="button" role="tab" aria-controls="tab5-winrate" aria-selected="false">Coalition win-rate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab5-fpv-btn" data-bs-toggle="tab" data-bs-target="#tab5-fpv" type="button" role="tab" aria-controls="tab5-fpv" aria-selected="false">First-choice vote</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab5-bubble" role="tabpanel" aria-labelledby="tab5-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 17.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab5-byslate" role="tabpanel" aria-labelledby="tab5-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x50_FASTSTV_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 18.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab5-winrate" role="tabpanel" aria-labelledby="tab5-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 19.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div><div class="tab-pane fade" id="tab5-fpv" role="tabpanel" aria-labelledby="tab5-fpv-btn"><figure class="figure d-block text-center my-2"><img src="figures/Low%20POC%20Turnout/Low%20POC%20Turnout_10x5_A_slate_pl_coalition_boxplot_fpv_share.png" class="figure-img img-fluid rounded border zoomable" alt="First-choice vote chart"><figcaption class="figure-caption"><span class="fig-num">Figure 20.</span> First-choice vote share for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+</div>
+
+          <!-- 4.4 -->
+          <h3 class="h4 mt-4" id="optimizing">4.4 Optimizing for Larger Asian VAP Districts</h3>
+
+          <div class="accordion mb-4">
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-6" aria-expanded="false" aria-controls="sc-6">10 &times; 5 STV &mdash; Larger Asian Districts</button>
+  </h4>
+  <div id="sc-6" class="accordion-collapse collapse">
+    <div class="accordion-body"><p>Gingleator short-burst optimized ensemble, biasing the 10-district chain toward higher-Asian-VAP-share districts instead of the neutral ReCom chain the other STV runs use.</p><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab6-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab6-bubble" type="button" role="tab" aria-controls="tab6-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab6-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab6-byslate" type="button" role="tab" aria-controls="tab6-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab6-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab6-winrate" type="button" role="tab" aria-controls="tab6-winrate" aria-selected="false">Coalition win-rate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab6-fpv-btn" data-bs-toggle="tab" data-bs-target="#tab6-fpv" type="button" role="tab" aria-controls="tab6-fpv" aria-selected="false">First-choice vote</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab6-bubble" role="tabpanel" aria-labelledby="tab6-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 21.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab6-byslate" role="tabpanel" aria-labelledby="tab6-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x50_FASTSTV_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 22.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab6-winrate" role="tabpanel" aria-labelledby="tab6-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 23.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div><div class="tab-pane fade" id="tab6-fpv" role="tabpanel" aria-labelledby="tab6-fpv-btn"><figure class="figure d-block text-center my-2"><img src="figures/10%20X%205%20STV%20-%20Larger%20Asian%20Districts/10%20X%205%20STV%20-%20Larger%20Asian%20Districts_10x5_A_slate_pl_coalition_boxplot_fpv_share.png" class="figure-img img-fluid rounded border zoomable" alt="First-choice vote chart"><figcaption class="figure-caption"><span class="fig-num">Figure 24.</span> First-choice vote share for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-7" aria-expanded="false" aria-controls="sc-7">50 &times; 1 IRV &mdash; Larger Asian Districts</button>
+  </h4>
+  <div id="sc-7" class="accordion-collapse collapse">
+    <div class="accordion-body"><p>Single-member wards, IRV, with the same Gingleator opportunity-district optimizer applied to the 50-district ensemble.</p><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab7-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab7-bubble" type="button" role="tab" aria-controls="tab7-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab7-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab7-byslate" type="button" role="tab" aria-controls="tab7-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab7-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab7-winrate" type="button" role="tab" aria-controls="tab7-winrate" aria-selected="false">Coalition win-rate</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab7-bubble" role="tabpanel" aria-labelledby="tab7-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 25.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab7-byslate" role="tabpanel" aria-labelledby="tab7-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x50_IRV_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 26.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab7-winrate" role="tabpanel" aria-labelledby="tab7-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts/50%20X%201%20IRV%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 27.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+<div class="accordion-item">
+  <h4 class="accordion-header">
+    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sc-8" aria-expanded="false" aria-controls="sc-8">50 &times; 1 PSMD &mdash; Larger Asian Districts</button>
+  </h4>
+  <div id="sc-8" class="accordion-collapse collapse">
+    <div class="accordion-body"><p>Single-member wards, Plurality (PSMD), with the Gingleator opportunity-district optimizer applied &mdash; the plurality counterpart to the IRV-optimized run above.</p><ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" id="tab8-bubble-btn" data-bs-toggle="tab" data-bs-target="#tab8-bubble" type="button" role="tab" aria-controls="tab8-bubble" aria-selected="true">Seat distribution</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab8-byslate-btn" data-bs-toggle="tab" data-bs-target="#tab8-byslate" type="button" role="tab" aria-controls="tab8-byslate" aria-selected="false">By slate</button></li><li class="nav-item" role="presentation"><button class="nav-link" id="tab8-winrate-btn" data-bs-toggle="tab" data-bs-target="#tab8-winrate" type="button" role="tab" aria-controls="tab8-winrate" aria-selected="false">Coalition win-rate</button></li></ul><div class="tab-content pt-3"><div class="tab-pane fade show active" id="tab8-bubble" role="tabpanel" aria-labelledby="tab8-bubble-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_bubbles_by_method.png" class="figure-img img-fluid rounded border zoomable" alt="Seat distribution chart"><figcaption class="figure-caption"><span class="fig-num">Figure 28.</span> Citywide seats won by Asian-preferred candidates across the sampled plans, shown per voter model with a pooled combined row; bubble size reflects how often each seat count occurred.</figcaption></figure></div><div class="tab-pane fade" id="tab8-byslate" role="tabpanel" aria-labelledby="tab8-byslate-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x50_PLURALITY_byslate.png" class="figure-img img-fluid rounded border zoomable" alt="By slate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 29.</span> Seats won by each slate's preferred candidates &mdash; White, Black, Latino, and Asian &mdash; broken out by voter model.</figcaption></figure></div><div class="tab-pane fade" id="tab8-winrate" role="tabpanel" aria-labelledby="tab8-winrate-btn"><figure class="figure d-block text-center my-2"><img src="figures/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts/50%20X%201%20PSMD%20-%20Larger%20Asian%20Districts_50x1_A_slate_pl_coalition_boxplot.png" class="figure-img img-fluid rounded border zoomable" alt="Coalition win-rate chart"><figcaption class="figure-caption"><span class="fig-num">Figure 30.</span> Win rate for the Asian-preferred coalition by district, with districts ranked from lowest to highest Asian VAP share.</figcaption></figure></div></div></div>
+  </div>
+</div>
+</div>
+        </section>
+
+        <!-- Appendix -->
+        <section id="appendix" class="mb-5">
+          <h2>Appendix</h2>
+          <h3 class="h4 mt-3" id="appendix-a">A. Configuration Reference</h3>
+          <p class="table-caption"><span class="fig-num">Table 7.</span> Full list of simulated runs and their configuration parameters.</p>
+          <div class="table-responsive mb-3">
+            <table class="table table-bordered table-sm align-middle">
+              <thead><tr><th>Run Name</th><th>Districts</th><th>Seats</th><th>Voting Method</th><th>Voter Blocs</th><th>Turnout (bloc)</th></tr></thead>
+              <tbody>
+                <tr><td>Basic &ndash; 50&times;1 Plurality</td><td>50 &times; 1</td><td>50</td><td>Plurality</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+                <tr><td>Low POC Turnout</td><td>10 &times; 5</td><td>50</td><td>Single Transferable Vote (5 seats)</td><td>W-A, B, H</td><td>0.75 / 0.50 / 0.50</td></tr>
+                <tr><td>10 &times; 3 STV</td><td>10 &times; 3</td><td>30</td><td>Single Transferable Vote (3 seats)</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+                <tr><td>10 &times; 5 STV</td><td>10 &times; 5</td><td>50</td><td>Single Transferable Vote (5 seats)</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+                <tr><td>10 &times; 5 STV - Larger Asian Districts</td><td>10 &times; 5</td><td>50</td><td>Single Transferable Vote (5 seats)</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+                <tr><td>50 &times; 1 IRV</td><td>50 &times; 1</td><td>50</td><td>Instant-Runoff Voting</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+                <tr><td>50 &times; 1 IRV - Larger Asian Districts</td><td>50 &times; 1</td><td>50</td><td>Instant-Runoff Voting</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+                <tr><td>50 &times; 1 PSMD - Larger Asian Districts</td><td>50 &times; 1</td><td>50</td><td>Plurality</td><td>W-A, B, H</td><td>1.00 / 1.00 / 1.00</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <footer class="py-4 mt-5 border-top">
+    <div class="container-xl text-center">
+      <p class="mb-1">Metric Geometry &amp; Gerrymandering Group &mdash; Chicago City Council Reform, 2026</p>
+      <p class="mb-0"><a href="https://github.com/mggg/Chicago-City-Council-Reform-2026" target="_blank" rel="noopener">View the repository on GitHub</a></p>
+    </div>
+  </footer>
+
+  <button id="toTop" class="btn btn-secondary btn-sm" aria-label="Back to top">&uarr; Top</button>
+
+  <!-- Lightbox for zoomable figures -->
+  <div class="modal fade" id="lightbox" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content border-0">
+        <div class="modal-body p-0 text-center position-relative">
+          <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 m-2" data-bs-dismiss="modal" aria-label="Close" style="z-index:2;"></button>
+          <img id="lightbox-img" src="" alt="" class="img-fluid rounded">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Back-to-top button
+    var toTop = document.getElementById('toTop');
+    window.addEventListener('scroll', function () {
+      toTop.style.display = window.scrollY > 600 ? 'block' : 'none';
+    });
+    toTop.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+
+    // Lightbox: click any zoomable figure to view it full size
+    var lightboxEl = document.getElementById('lightbox');
+    var lightbox = new bootstrap.Modal(lightboxEl);
+    var lightboxImg = document.getElementById('lightbox-img');
+    document.querySelectorAll('img.zoomable').forEach(function (img) {
+      img.addEventListener('click', function () {
+        lightboxImg.src = this.src;
+        lightboxImg.alt = this.alt;
+        lightbox.show();
+      });
+    });
+  </script>
+</body>
+</html>

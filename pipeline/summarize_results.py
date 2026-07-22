@@ -1013,6 +1013,12 @@ def _plot_bubbles_for_config(
 # the win-rate gradient.
 
 COALITION_BASE_COLOR = "#1a7a3c"  # green, independent of MODE_COLORS (5.39:1)
+# Distinct hue for the fpv_share variant (same HLS lightness/saturation as
+# COALITION_BASE_COLOR, hue rotated to blue) -- win_rate and fpv_share both
+# climb steadily with VAP-share rank in most runs, so a shared green ramp made
+# the two color-by variants nearly indistinguishable at a glance even though
+# the underlying metric (and its scale) differs.
+COALITION_FPV_COLOR = "#194b7a"  # blue (9.02:1)
 COALITION_NO_WINNER_COLOR = "#000000"
 COALITION_BOX_EDGE = "#52514e"
 
@@ -1206,11 +1212,13 @@ COALITION_COLOR_METRICS = {
         "colorbar_label": "Win Rate",
         "zero_case_label": lambda group_label: f"No {group_label} winner at this rank",
         "filename_suffix": "",
+        "base_color": COALITION_BASE_COLOR,
     },
     "fpv_share": {
         "colorbar_label": "Avg. First-Place Vote Share",
         "zero_case_label": lambda group_label: f"No {group_label} first-place votes at this rank",
         "filename_suffix": "_fpv_share",
+        "base_color": COALITION_FPV_COLOR,
     },
 }
 
@@ -1218,16 +1226,19 @@ COALITION_COLOR_METRICS = {
 def _draw_coalition_boxplot(
     ax, data_by_rank: Dict[int, Any], color_by_rank: pd.Series, group_label: str,
     *, tick_step: int = 1, small: bool = False, zero_case_label: Optional[str] = None,
+    base_color: str = COALITION_BASE_COLOR,
 ) -> None:
     """Draw one rank-based coalition boxplot onto `ax` (shared by the standalone
     and grid figures below). color_by_rank is whatever per-rank 0-100 scalar
-    should set box color (win rate or average first-place-vote share)."""
+    should set box color (win rate or average first-place-vote share); base_color
+    is that scalar's ramp color (see COALITION_COLOR_METRICS -- win_rate and
+    fpv_share get distinct hues so the two variants aren't visually identical)."""
     ranks = sorted(data_by_rank.keys())
     data = [data_by_rank[r] for r in ranks]
     zero_case_label = zero_case_label or f"No {group_label} winner at this rank"
 
     nonzero_rates = color_by_rank[color_by_rank > 0]
-    cmap = mcolors.LinearSegmentedColormap.from_list("winrate", ["#ffffff", COALITION_BASE_COLOR])
+    cmap = mcolors.LinearSegmentedColormap.from_list("coalition_ramp", ["#ffffff", base_color])
     if nonzero_rates.empty:
         norm = mcolors.Normalize(vmin=0, vmax=1)
     else:
@@ -1293,14 +1304,15 @@ def _draw_coalition_boxplot(
 
 def _add_coalition_colorbar(
     fig, rect: Tuple[float, float, float, float], color_by_rank: pd.Series,
-    *, label: str = "Win Rate",
+    *, label: str = "Win Rate", base_color: str = COALITION_BASE_COLOR,
 ) -> None:
     """Isolated horizontal colorbar legend at figure coordinates `rect`, labeled
-    only at the two extreme nonzero values of color_by_rank."""
+    only at the two extreme nonzero values of color_by_rank. base_color should
+    match whatever was passed to _draw_coalition_boxplot for the same figure."""
     nonzero_rates = color_by_rank[color_by_rank > 0]
     if nonzero_rates.empty:
         return
-    cmap = mcolors.LinearSegmentedColormap.from_list("winrate", ["#ffffff", COALITION_BASE_COLOR])
+    cmap = mcolors.LinearSegmentedColormap.from_list("coalition_ramp", ["#ffffff", base_color])
     norm = mcolors.Normalize(vmin=nonzero_rates.min(), vmax=nonzero_rates.max())
     sm = ScalarMappable(cmap=cmap, norm=norm)
     cbar_ax = fig.add_axes(rect)
@@ -1379,6 +1391,7 @@ def plot_coalition_boxplot(
         _draw_coalition_boxplot(
             ax, data_by_rank, color_by_rank, _group_label(slate),
             zero_case_label=metric["zero_case_label"](_group_label(slate)),
+            base_color=metric["base_color"],
         )
         ax.set_title("")  # title lives on the figure instead, to match the header layout below
 
@@ -1390,7 +1403,10 @@ def plot_coalition_boxplot(
             0.5, 0.9, f"{run_name} - {MODEL_NAMES.get(mode, mode)} Model",
             ha="center", va="bottom", fontsize=11, color="#52514e", style="italic",
         )
-        _add_coalition_colorbar(fig, (0.07, 0.855, 0.16, 0.015), color_by_rank, label=metric["colorbar_label"])
+        _add_coalition_colorbar(
+            fig, (0.07, 0.855, 0.16, 0.015), color_by_rank,
+            label=metric["colorbar_label"], base_color=metric["base_color"],
+        )
 
         fig_path = (
             figs_dir
@@ -1473,6 +1489,7 @@ def plot_coalition_boxplot_available(
         _draw_coalition_boxplot(
             ax, data_by_rank, color_by_rank, _group_label(slate),
             zero_case_label=metric["zero_case_label"](_group_label(slate)),
+            base_color=metric["base_color"],
         )
         ax.set_title("")  # title lives on the figure instead, to match the header layout below
 
@@ -1486,7 +1503,10 @@ def plot_coalition_boxplot_available(
             f"(Districts with an Available {_group_label(slate)} Candidate)",
             ha="center", va="bottom", fontsize=10, color="#52514e", style="italic",
         )
-        _add_coalition_colorbar(fig, (0.07, 0.855, 0.16, 0.015), color_by_rank, label=metric["colorbar_label"])
+        _add_coalition_colorbar(
+            fig, (0.07, 0.855, 0.16, 0.015), color_by_rank,
+            label=metric["colorbar_label"], base_color=metric["base_color"],
+        )
 
         fig_path = (
             figs_dir
@@ -1550,6 +1570,7 @@ def plot_coalition_boxplot_grid(
                 ax, data_by_rank, color_by_rank, _group_label(group),
                 tick_step=tick_step, small=True,
                 zero_case_label=metric["zero_case_label"](_group_label(group)),
+                base_color=metric["base_color"],
             )
             drawn += 1
 

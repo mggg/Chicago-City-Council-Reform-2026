@@ -13,6 +13,7 @@
   - [Status Quo - 50 X 1 Plurality/IRV](#42-status-quo---50-x-1-pluralityirv)
   - [Low Voter Turnout](#43-low-voter-turnout)
   - [Optimizing for Larger Asian VAP Districts](#44-optimizing-for-larger-asian-vap-districts)
+- [Analysis and Discussion](#5-analysis-and-discussion)
 - [Appendix](#appendix)
   - [A. Cross-Run Comparison](#a-cross-run-comparison)
   - [B. Configurations](#b-configurations)
@@ -378,7 +379,7 @@ optimizer applied — the plurality counterpart to the IRV-optimized run above.
 
 <div style="page-break-after: always;"></div>
 
-### 4.5 Analysis and Discussion
+## 5. Analysis and Discussion
 
 In this section, we perform a brief analysis of our findings and discuss possible explanations for our observations. Since the report thus far has been primarily concerned with the consistently underrepresented Asian bloc, the scope of this exploration will be limited to this fact. Additionally, we'll be focusing on 10 X 5 STV as our electoral system of choice, given that it resulted in outcomes closer to proportionality than most other systems. To frame the analysis, we'd like to pose two questions to the reader that we will then attempt to answer:
 

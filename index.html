@@ -182,9 +182,9 @@
   <!-- Hero -->
   <header class="hero py-5" id="top">
     <div class="container-xl">
-      <p class="text-uppercase mb-2" style="letter-spacing:.12em; font-family:'Source Sans Pro',sans-serif; font-size:.8rem; color:#d7f0fa;">Metric Geometry &amp; Gerrymandering Group</p>
+      <p class="text-uppercase mb-2" style="letter-spacing:.12em; font-family:'Source Sans Pro',sans-serif; font-size:.8rem; color:#d7f0fa;">Data and Democracy Research Initiative</p>
       <h1 class="display-5 fw-bold">Revisiting Reform Proposals for Chicago City Council</h1>
-      <p class="lead mb-0">Updating MGGG's 2019 study with 2020 Census data, current ward boundaries, and modern election-modeling tools.</p>
+      <p class="lead mb-0">Updating DDRI's 2019 study with 2020 Census data, current ward boundaries, and modern election-modeling tools.</p>
     </div>
   </header>
 
@@ -227,7 +227,7 @@
           <div class="card abstract-card shadow-sm mb-4">
             <div class="card-body">
               <h2 class="h4 card-title">Abstract</h2>
-              <p class="card-text mb-0">In April 2019, the Metric Geometry and Gerrymandering Group published a study on reform proposals and alternative electoral systems for Chicago City Council, stating that many observers would agree that Chicago's City Council ward system is entrenched in problematic gerrymandering, segregation, and inefficiency &mdash; issues many would argue still persist today. The goal of the 2019 study was to apply mathematical models to analyze the then-active ward plan and propose reforms to address these problems. This report seeks to replicate and update the results of the 2019 study by using the more current ward plan, newer demographic data, and more refined techniques that the lab has since developed. We will additionally be examining the impacts of the included reform proposals on representation for Asian voters &mdash; a voting bloc that has consistently gone underrepresented in Chicago City Council.</p>
+              <p class="card-text mb-0">In April 2019, the Data and Democracy Research Initiative published a study on reform proposals and alternative electoral systems for Chicago City Council, stating that many observers would agree that Chicago's City Council ward system is entrenched in problematic gerrymandering, segregation, and inefficiency &mdash; issues many would argue still persist today. The goal of the 2019 study was to apply mathematical models to analyze the then-active ward plan and propose reforms to address these problems. This report seeks to replicate and update the results of the 2019 study by using the more current ward plan, newer demographic data, and more refined techniques that the lab has since developed. We will additionally be examining the impacts of the included reform proposals on representation for Asian voters &mdash; a voting bloc that has consistently gone underrepresented in Chicago City Council.</p>
             </div>
           </div>
         </section>
@@ -302,7 +302,7 @@
           <p>Given that Asian voters have been consistently underpresented within Chicago's city council, a goal of the report is to understand the conditions under which proportional representation could be achieved &mdash; including intentional redistricting to optimize for more wards with larger Asian populations. We accomplish this by using the Gingleator optimizer within the GerryChain library. The optimizer will perform &ldquo;short bursts&rdquo; of 100 steps to identify and select a plan according to a provided scoring function and target population threshold. We use the default score function that simply keeps track of plans with the highest number of districts that meet our threshold criteria. In the case of 50 district plans, we set that threshold at 20%, and in 10 district plans we set it at 15%.</p>
 
           <h3 class="h4 mt-4" id="blocs">3.2 Voter Blocs and Candidate Slates</h3>
-          <p>Mirroring the 2019 report, we consider the four largest racial demographic groups when identifying blocs of voters with shared preferences and slates of candidates with similar policies and positions. Slates are limited to and delineated by Black, Asian, Hispanic, and White candidates. Voter blocs follow this with a major exception: we made the decision to combine White and Asian voters into a single bloc. The reasoning for this is guided by evidence that Asian and White voters in Chicago demonstrate similar behaviors and preferences at the ballot box, particularly when looking at the last several mayoral and city council elections. While there currently exists no expansive data sets or analysis examining Asian voting behavior in Chicago elections, a handful of examples do exist: MGGG's previous application of Goodman's Ecological Regression on [add source here] and <a href="https://uofi.app.box.com/s/g2wlv9836atormomsn64alse2ysapjrd" target="_blank" rel="noopener">Greater Cities Institute's</a> application of ecological inference on voters in the 2023 mayoral election. Considering the similarities in behavior between the two blocs, we model them as a single bloc for the purposes of this analysis.</p>
+          <p>Mirroring the 2019 report, we consider the four largest racial demographic groups when identifying blocs of voters with shared preferences and slates of candidates with similar policies and positions. Slates are limited to and delineated by Black, Asian, Hispanic, and White candidates. Voter blocs follow this with a major exception: we made the decision to combine White and Asian voters into a single bloc. The reasoning for this is guided by evidence that Asian and White voters in Chicago demonstrate similar behaviors and preferences at the ballot box, particularly when looking at the last several mayoral and city council elections. While there currently exists no expansive data sets or analysis examining Asian voting behavior in Chicago elections, a handful of examples do exist: DDRI's previous application of Goodman's Ecological Regression on [add source here] and <a href="https://uofi.app.box.com/s/g2wlv9836atormomsn64alse2ysapjrd" target="_blank" rel="noopener">Greater Cities Institute's</a> application of ecological inference on voters in the 2023 mayoral election. Considering the similarities in behavior between the two blocs, we model them as a single bloc for the purposes of this analysis.</p>
 
           <h3 class="h4 mt-4" id="candidates">3.3 Candidate Availability and Pool Size</h3>
           <p>To simulate candidate availability per-ward for each voting bloc, we make a few decisions and assumptions guided by available evidence from previous Chicago general city council elections. The first is deciding how many total candidates will be on the ballot for a given ward. In 2023, the average number of candidates running across all 50 wards (not counting write-ins) was approximately 3.48, with a large number of wards featuring anywhere between one to four candidates in the election, and fewer featuring counts larger than five.</p>
@@ -355,7 +355,7 @@
               </tbody>
             </table>
           </div>
-          <p>The cohesion parameters here have been selected based on available estimates (from ecological regression) from the earlier 2019 MGGG study on Chicago city council reform, as well as a mayoral election analysis from the Greater Cities Institute.</p>
+          <p>The cohesion parameters here have been selected based on available estimates (from ecological regression) from the earlier 2019 DDRI study on Chicago city council reform, as well as a mayoral election analysis from the Greater Cities Institute.</p>
 
           <h3 class="h4 mt-4" id="voting-rules">3.5 Voting Rules</h3>
           <p>Elections for each district are simulated using VoteKit's Elections module. We use the following voting rules with the corresponding district configurations:</p>
@@ -510,7 +510,7 @@
 
   <footer class="py-4 mt-5 border-top">
     <div class="container-xl text-center">
-      <p class="mb-1">Metric Geometry &amp; Gerrymandering Group &mdash; Chicago City Council Reform, 2026</p>
+      <p class="mb-1">Data and Democracy Research Initiative &mdash; Chicago City Council Reform, 2026</p>
       <p class="mb-0"><a href="https://github.com/mggg/Chicago-City-Council-Reform-2026" target="_blank" rel="noopener">View the repository on GitHub</a></p>
     </div>
   </footer>

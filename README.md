@@ -26,7 +26,7 @@ racial slate.
 | `outputs/` | All pipeline outputs (generated, gitignored). |
 | `figures/` | The subset of pipeline figures used in the report. |
 | `assets/` | Static images used in the report and documentation. |
-| `notebooks/` | Analysis notebook for the 2019 comparison figure. |
+| `notebooks/` | The 2019 comparison figure and diagnostics of Asian-candidate support. |
 | `documentation/` | Reference notes on the district generator, voting rules, and cohesion parameters. |
 | `report/` | Report source, stylesheet, and PDF. |
 
@@ -129,7 +129,9 @@ Config fields are described in
 [`documentation/voting-rule-reference.md`](documentation/voting-rule-reference.md),
 and [`documentation/cohesion-parameters.md`](documentation/cohesion-parameters.md).
 
-## 2019 comparison notebook
+## Notebooks
+
+### 2019 comparison
 
 [`notebooks/mggg_2019_comparison_10x5.ipynb`](notebooks/mggg_2019_comparison_10x5.ipynb)
 produces Figure 2 of the report (`figures/comparison.png`). It needs the
@@ -141,6 +143,15 @@ uv run --with jupyterlab jupyter lab notebooks/mggg_2019_comparison_10x5.ipynb
 ```
 
 Set `MGGG_CHICAGO_REPO` to use a checkout somewhere else.
+
+### Asian-candidate diagnostics
+
+[`notebooks/diagnostics.ipynb`](notebooks/diagnostics.ipynb) looks at the five
+sampled districts with the highest Asian VAP share in the `10 X 5 STV` run. For
+each one it counts how often ballots ranked the Asian-slate candidates 1st, 2nd,
+and 3rd, then regenerates the ballots bloc by bloc to show which voter blocs
+that support comes from. It needs the `10 X 5 STV` run outputs, including
+`outputs/cross_run_summaries/10 X 5 STV_district_demographics.csv`.
 
 ## Building the report
 

@@ -14,12 +14,11 @@ from pipeline.profile_generator import generate_profiles
 from pipeline.simulate_elections import simulate_elections
 from pipeline.summarize_results import summarize_results, plot_combined_bubbles_all_runs, export_district_demographics_csv, plot_district_demographics, export_one_plan_breakdown
 from pipeline.data_generator import generate_data
-from pipeline.summarize_results import summarize_results
 from pipeline.utils.profiling import profile_stage, print_profile_summary
 from pipeline.utils.helpers import get_voter_models, get_chain_out_dir, ensemble_signature
 
 def load_all_config_files(config_dir="configs"):
-    all_config_files = [load_config(path) for path in glob(f"{config_dir}/*.json")]
+    all_config_files = [load_config(path) for path in sorted(glob(f"{config_dir}/*.json"))]
     return all_config_files
 
 
@@ -310,28 +309,24 @@ def run_pipeline(config):
 
 
 def main():
-    # configurations = load_all_config_files(config_dir="configs")
-    configurations = [
-        load_config("configs/10x3-stv.json"),
-        load_config("configs/10x5-stv.json"),
-        load_config("configs/asian-seperate-bloc.json"),
-        load_config("configs/asian_optimized.json"),
-        load_config("configs/low-poc-turnout.json"),
-    ]
+    configurations = load_all_config_files(config_dir="configs")
+    # Config the cross-run figures and demographic exports below are drawn from
+    # (plot_combined_bubbles_all_runs only uses it for the seat-count axis range).
+    cross_run_config = load_config("configs/low-poc-turnout.json")
     # Create GPKG and Graph Files
     print("==== Generating GPKG and Graph Data ===")
     generate_data()
 
-    # Run pipeline for all configurations in configs/
+    # Run pipeline for every configuration in configs/
     for config in configurations:
         print("="*100,f"\n Running {config["run_name"]}\n","="*20)
         run_pipeline(config)
 
-    plot_combined_bubbles_all_runs(config, exclude_runs=["Asian Bloc Separate"])
-    export_district_demographics_csv(config)
-    plot_district_demographics(config["run_name"])
-    for district_num in sorted(p.name for p in get_chain_out_dir(ensemble_signature(config)).iterdir() if p.name.isdigit()):
-        export_one_plan_breakdown(int(district_num), plan_idx=0, run_name=config["run_name"])
+    plot_combined_bubbles_all_runs(cross_run_config, exclude_runs=["Asian Bloc Separate"])
+    export_district_demographics_csv(cross_run_config)
+    plot_district_demographics(cross_run_config["run_name"])
+    for district_num in sorted(p.name for p in get_chain_out_dir(ensemble_signature(cross_run_config)).iterdir() if p.name.isdigit()):
+        export_one_plan_breakdown(int(district_num), plan_idx=0, run_name=cross_run_config["run_name"])
 
 if __name__ == "__main__":
     

@@ -1,75 +1,163 @@
-# Kansas-City-alternative-election-analysis
+# Revisiting Reform Proposals for Chicago City Council
 
-## District Generator Parameters
+Code, configurations, and report for a 2026 update of MGGG's 2019 study of
+alternative electoral systems for the Chicago City Council. The pipeline builds
+precinct-level demographic data from the 2020 Census, samples ensembles of
+districting plans with [GerryChain](https://github.com/mggg/GerryChain),
+simulates ranked-choice ballots and elections with
+[VoteKit](https://github.com/mggg/VoteKit), and summarizes seat outcomes by
+racial slate.
 
-- `run_name`: Name of the simulation run. Used to create the output directory and output file names
-- `seed`: Random seed used to ensure reproducibility of the Markov Chain simulation.
-- `chain_length`: Number of Markov Chain iterations (i.e., the number of districting plans generated).
-- `n_district`: Number of districts to generate in the simulated districting plans.
-- `epsilon` (`seed_epsilon`): Population tolerance used when generating the **initial random districting plan**. Each district is initialized within ±`epsilon` of the ideal district population. |
-- `geodata_path`: Path to the GeoPackage (`.gpkg`) containing the geographic units (precincts or census blocks) and their demographic attributes.
-- `population_column`: Column name of total population variable.
+- **Report:** [`report/report.pdf`](report/report.pdf) (source:
+  [`report/report.md`](report/report.md)); web version:
+  [`index.html`](index.html)
+- **2019 study:** [github.com/mggg/chicago](https://github.com/mggg/chicago)
 
-Note: This implementation uses two population tolerances. seed_epsilon controls the generation of the initial random partition, while chain_epsilon controls the maximum population deviation allowed throughout the Markov Chain. This allows the chain to begin from a valid initial plan while enforcing a consistent population balance (±5%) during sampling.
+## Repository layout
 
-## VoteKit Voting Rule Parameters
-
-All classes take `profile` as the first positional argument. The type required differs:
-- **Ranking elections** require a `RankProfile`
-- **Score elections** (Rating/Approval/Cumulative/Limited) require a `ScoreProfile`
-- **`BlockPlurality`** accepts *either* and dispatches internally
-
-A note on **deprecated aliases**: many classes still accept legacy kwargs via `_handle_deprecated_kwargs` — `m` → `n_seats`, and `k` → `per_candidate_limit` or `budget` (depending on class). New code should use the new names.
-
-### Shared base parameters
-
-From `Election` / `RankingElection` (usually set internally by each subclass, not passed by users):
-- `score_function` — `Callable[[profile], dict[str, float]]`, default `None`
-- `sort_high_low` — `bool`, default `True`
-- `n_seats` — `int`, default `1` (must be positive)
-
-### Ranking elections
-
-| Class | Parameters (beyond `profile`) |
+| Path | Contents |
 |---|---|
-| **STV** | `n_seats=1`, `transfer=fractional_transfer` (a Callable), `quota="droop"` ‹"droop"/"hare"›, `simultaneous=True`, `tiebreak=None` ‹"borda"/"random"› |
-| **FastSTV** | `n_seats=1`, `transfer="fractional"` ‹"fractional"/"fractional_random"/"cambridge_random"/"random"›, `quota="droop"`, `simultaneous=True`, `tiebreak=None` ‹"borda"/"random"/"cambridge_random"› |
-| **IRV** | `quota="droop"`, `tiebreak=None` (n_seats fixed to 1) |
-| **FastIRV** | `quota="droop"`, `tiebreak=None` |
-| **SequentialRCV** / **FastSequentialRCV** | `n_seats=1`, `quota="droop"`, `simultaneous=True`, `tiebreak=None` |
-| **AlbanySTV** | same as FastSTV (forces `dynamic_threshold=True`) |
-| *(internal `NumpyInnerSTV`)* | adds `dynamic_threshold=False`, `block_rcv=False` |
-| **Plurality** | `n_seats=1`, `tiebreak=None` ‹"random"/"borda"›, `fpv_tie_convention="average"` ‹"high"/"low"/"average"› |
-| **SNTV** | `n_seats=1`, `tiebreak=None` (wrapper around Plurality) |
-| **Borda** | `n_seats=1`, `score_vector=None` (defaults to `(n, n-1, …, 1)`), `tiebreak=None` ‹"random"/"first_place"›, `scoring_tie_convention="low"` |
-| **Alaska** | `m_1=2` (first-round semifinalists), `m_2=1` (final seats), `transfer=fractional_transfer`, `quota="droop"`, `simultaneous=True`, `tiebreak=None`, `fpv_tie_convention="average"` |
-| **TopTwo** | `tiebreak=None`, `fpv_tie_convention="average"` |
-| **CondoBorda** | `n_seats=1` |
-| **DominatingSets** | *(none beyond profile)* |
-| **PluralityVeto** / **SerialVeto** | `n_seats=1`, `tiebreak="first_place"` ‹"first_place"/"borda"/"random"/"lex"›, `scoring_tie_convention="average"` |
-| **SimultaneousVeto** | `n_seats=1`, `candidate_weights="first_place"` ‹"first_place"/"uniform"/"borda"/"harmonic"/ dict / int›, `tiebreak="first_place"` ‹+"remaining_score"/"veto_pressure"/"lex"›, `scoring_tie_convention="average"`, `return_all_tied_winners=False` |
-| **RandomDictator** | `n_seats=1`, `fpv_tie_convention="average"` |
-| **BoostedRandomDictator** | `n_seats=1`, `fpv_tie_convention="average"` |
-| **RankedPairs** | `tiebreak="lexicographic"`, `n_seats=1` |
-| **Schulze** | `tiebreak="lexicographic"`, `n_seats=1` |
+| `run.py` | Main entry point: builds the data, then runs the pipeline for every config in `configs/` and the cross-run summaries. |
+| `main.py`, `setup.py` | Alternative entry point: pick (or build) a single config interactively and run the pipeline for it. |
+| `pipeline/` | Pipeline stages (see [Pipeline stages](#pipeline-stages)) and shared helpers in `pipeline/utils/`. |
+| `configs/` | One JSON config per simulation run in the report. |
+| `pipeline-config/` | Browser-based config builder ([instructions](pipeline-config/instructions.md)). |
+| `data/` | The Chicago precinct shapefile (committed) plus Census downloads and derived files (generated, gitignored). |
+| `outputs/` | All pipeline outputs (generated, gitignored). |
+| `figures/` | The subset of pipeline figures used in the report. |
+| `assets/` | Static images used in the report and documentation. |
+| `notebooks/` | Analysis notebook for the 2019 comparison figure. |
+| `documentation/` | Reference notes on the district generator, voting rules, and cohesion parameters. |
+| `report/` | Report source, stylesheet, and PDF. |
 
-### Score elections
+## Setup
 
-| Class | Parameters (beyond `profile`) |
-|---|---|
-| **GeneralRating** | `n_seats=1`, `per_candidate_limit=1`, `budget=None` (total points/voter), `tiebreak=None` ‹"random"› |
-| **Rating** | `n_seats=1`, `per_candidate_limit=1`, `tiebreak=None` |
-| **Limited** | `n_seats=1`, `budget=1` (must be ≤ n_seats), `tiebreak=None` |
-| **Cumulative** | `n_seats=1`, `tiebreak=None` (sets `budget=n_seats`, `per_candidate_limit` unbounded) |
-| **Approval** | `n_seats=1`, `tiebreak=None` (sets `per_candidate_limit=1`, no budget) |
-| **BlockPlurality** | `n_seats=1`, `budget=None` (→ n_seats), `tiebreak=None`, `scoring_tie_convention="low"` (only used for RankProfile input) |
-| **BlocPlurality** | *(deprecated alias of BlockPlurality for ScoreProfile)* — `n_seats=1`, `budget=None`, `tiebreak=None` |
+Requires Python 3.13 and [uv](https://docs.astral.sh/uv/).
 
-### Cross-cutting parameters
+```bash
+git clone https://github.com/mggg/Chicago-City-Council-Reform-2026.git
+cd Chicago-City-Council-Reform-2026
+uv sync
+```
 
-- **`n_seats`** — number of seats; nearly universal.
-- **`tiebreak`** — present almost everywhere, but the *accepted values differ by class* (e.g., STV uses borda/random/cambridge_random; Condorcet methods use "lexicographic"; veto methods add "lex"/"veto_pressure"; rating methods only accept None/"random"). Default `None` means a tie *raises an error*.
-- **`quota`** — STV family only ("droop"/"hare").
-- **`transfer`** — STV/Alaska only.
-- **`budget`** / **`per_candidate_limit`** — score elections only.
-- **`*_tie_convention`** (`fpv_tie_convention` / `scoring_tie_convention`) — how tied scores split points ("high"/"average"/"low").
+The data step downloads from the Census API, which needs a free API key
+([sign up here](https://api.census.gov/data/key_signup.html)). Put it in a
+`.env` file in the repository root:
+
+```
+CENSUS_API_KEY=your-key-here
+```
+
+`.env` is gitignored, so your key is never committed. The pipeline reads the
+key on startup even when the Census downloads are already cached in `data/`,
+so every run needs it.
+
+## Data
+
+`pipeline/data_generator.py` builds `data/chicago_precincts_vap_cvap.gpkg`, the
+geodata file every config points to:
+
+1. **Precincts:** `data/chicago-precincts.shp` (committed), the Chicago voting
+   precincts with ward assignments.
+2. **Blocks:** 2020 TIGER/Line block geometries for Cook and DuPage counties.
+3. **Voting-age population:** 2020 Decennial PL 94-171 tables P1, P3, and P4 at
+   the block level.
+4. **Citizenship:** ACS 5-year (2024) table B05003 at the tract level, used to
+   estimate block-level CVAP.
+
+Each block is assigned to the precinct containing its interior point, and block
+VAP/CVAP is summed up to precincts. Downloads are cached in `data/`, so later
+runs skip the Census API calls.
+
+## Running the pipeline
+
+```bash
+uv run python run.py
+```
+
+This builds the data (if not already cached), then runs every config in
+`configs/`. After that it draws the cross-run comparison figure and the
+district demographic exports. Each run writes to `outputs/<run_name>/`.
+District ensembles are shared between runs with the same districting settings
+and are written to `outputs/districts/`. The pipeline checks what already
+exists and resumes from the first incomplete stage, so an interrupted run can
+be restarted with the same command.
+
+To run a single config interactively instead:
+
+```bash
+uv run python main.py
+```
+
+Answer `y` at the first prompt and give the path to a config file. The
+interactive option to build a new config from scratch doesn't yet ask for every
+field the pipeline needs (`blocs`, `voting_configs`, `voter_models`,
+`epsilon`, `population_vap_column`, `candidate_geometric_p`). To create a new
+config, use the config builder instead:
+
+```bash
+uv run python pipeline-config/server.py   # then open http://localhost:8000
+```
+
+### Pipeline stages
+
+| Stage | Module | Output |
+|---|---|---|
+| Data | `pipeline/data_generator.py` | `data/chicago_precincts_vap_cvap.gpkg` |
+| District ensemble | `pipeline/district_generator.py` | `outputs/districts/chain_out/<n>/` |
+| District settings | `pipeline/settings_generator.py` | `outputs/<run>/settings/` |
+| Ballot profiles | `pipeline/profile_generator.py` | `outputs/<run>/profiles.zip` |
+| Elections | `pipeline/simulate_elections.py` | `outputs/<run>/election_results/` |
+| Summaries & figures | `pipeline/summarize_results.py` | `outputs/<run>/summaries/` |
+
+### Configs and report sections
+
+| Config | Run name | Report section |
+|---|---|---|
+| `configs/10x5-stv.json` | 10 X 5 STV | 4.1 |
+| `configs/10x3-stv.json` | 10 X 3 STV | 4.1 |
+| `configs/basic.json` | 50 X 1 Plurality | 4.2 |
+| `configs/50-irv.json` | 50 X 1 IRV | 4.2 |
+| `configs/low-poc-turnout.json` | Low POC Turnout | 4.3 |
+| `configs/asian_optimized.json` | 10 X 5 STV - Larger Asian Districts | 4.4 |
+| `configs/50-irv-asian-optimized.json` | 50 X 1 IRV - Larger Asian Districts | 4.4 |
+| `configs/50-psmd-asian-optimized.json` | 50 X 1 PSMD - Larger Asian Districts | 4.4 |
+| `configs/asian-seperate-bloc.json` | 10 X 5 STV - Asian Bloc Separate | Not shown in the report |
+
+Config fields are described in
+[`documentation/district-generator-reference.md`](documentation/district-generator-reference.md),
+[`documentation/voting-rule-reference.md`](documentation/voting-rule-reference.md),
+and [`documentation/cohesion-parameters.md`](documentation/cohesion-parameters.md).
+
+## 2019 comparison notebook
+
+[`notebooks/mggg_2019_comparison_10x5.ipynb`](notebooks/mggg_2019_comparison_10x5.ipynb)
+produces Figure 2 of the report (`figures/comparison.png`). It needs the
+`10 X 5 STV` run outputs and a checkout of the 2019 study next to this repo:
+
+```bash
+git clone https://github.com/mggg/chicago.git ../chicago
+uv run --with jupyterlab jupyter lab notebooks/mggg_2019_comparison_10x5.ipynb
+```
+
+Set `MGGG_CHICAGO_REPO` to use a checkout somewhere else.
+
+## Building the report
+
+The report is written in Markdown at `report/report.md`. Its images point at
+`../figures/` and `../assets/`.
+
+1. **Update figures.** After re-running the pipeline, copy each figure the
+   report uses from `outputs/<run_name>/summaries/figures/` (and
+   `outputs/cross_run_summaries/figures/`) into the matching folder under `figures/`.
+   Regenerate `figures/comparison.png` with the notebook above.
+2. **Export the PDF.** Open the repo in VS Code with the
+   [Markdown PDF](https://marketplace.visualstudio.com/items?itemName=yzane.markdown-pdf)
+   extension installed. Open `report/report.md` and run **Markdown PDF: Export
+   (pdf)** from the command palette. The committed `.vscode/settings.json`
+   applies `report/report.css` (MGGG article styling), Letter paper,
+   1.25-inch margins, and page numbers. The extension writes `report.pdf` next
+   to the Markdown file. It needs a network connection to load the web fonts.
+3. **Update the web version.** `index.html` is a standalone page (Bootstrap +
+   MathJax) maintained by hand. Copy any text or figure changes from
+   `report.md` into it.

@@ -1,4 +1,4 @@
-# SignaCheck .gitignore
+# Chicago City Council Reform 2026 .gitignore
 
 # =============================================================================
 # CREDENTIALS
@@ -44,12 +44,13 @@ env/
 # =============================================================================
 .ipynb_checkpoints/
 *.ipynb_checkpoints
-*.ipynb
 
 # =============================================================================
 # IDE / Editor
 # =============================================================================
-.vscode/
+.vscode/*
+# Report PDF export settings (see README, "Building the report")
+!.vscode/settings.json
 .idea/
 *.swp
 *.swo
@@ -57,9 +58,12 @@ env/
 .DS_Store
 
 # =============================================================================
-# Data files 
+# Data files
 # =============================================================================
+# Everything under data/ is downloaded or built by pipeline/data_generator.py,
+# except the precinct shapefile, which has no download step and must be tracked.
 data/*
+!data/chicago-precincts.*
 *.csv
 *.xlsx
 *.parquet
@@ -86,4 +90,6 @@ outputs/
 .Trashes
 ehthumbs.db
 Thumbs.db
-narrativa/
+
+# Report build scratch output
+pdf-forge-exports/

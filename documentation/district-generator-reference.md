@@ -11,7 +11,7 @@ Example:
 
 ```
 {
-  "run_name": "Kansas_City_Baseline", <-- Name of the simulation
+  "run_name": "10 X 5 STV", <-- Name of the simulation
 
   "geodata_path": "./data/KC_blocks_vap_cvap.gpkg", <-- Path of the geodata at block level
 
@@ -78,7 +78,7 @@ Example:
 ```
 
 1. Transform geodata to dual graph.
-- We represent Kansas City as a graph where each node corresponds to a precint/ block, joined by an edge for adjancent units. This is also a districting plan where we have an assignment of every node to a district number. The adjacent nodes are geographically adjacent precints/ blocks.
+- We represent Chicago as a graph where each node corresponds to a precint/ block, joined by an edge for adjancent units. This is also a districting plan where we have an assignment of every node to a district number. The adjacent nodes are geographically adjacent precints/ blocks.
 
 2. Initial Random Partition
 - Recursive tree splitting algorithm defines a starting plan. In other words, we are going to generate a concrete assignment of precints/blocks into districts that satifies population balance rules. So, MC have an input to where to start its random wlaks

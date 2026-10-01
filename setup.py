@@ -316,4 +316,11 @@ def setup_config():
     return config
 
 if __name__ == "__main__":
-    setup_config()
+    # Alternative to run.py: run the pipeline for the single config chosen (or
+    # built) above, instead of every config in configs/.
+    from run import run_pipeline
+    from pipeline.data_generator import generate_data
+
+    config = setup_config()
+    generate_data()
+    run_pipeline(config)

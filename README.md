@@ -18,7 +18,7 @@ racial slate.
 | Path | Contents |
 |---|---|
 | `run.py` | Main entry point: builds the data, then runs the pipeline for every config in `configs/` and the cross-run summaries. |
-| `main.py`, `setup.py` | Alternative entry point: pick (or build) a single config interactively and run the pipeline for it. |
+| `setup.py` | Alternative entry point: pick (or build) a single config interactively and run the pipeline for it. |
 | `pipeline/` | Pipeline stages (see [Pipeline stages](#pipeline-stages)) and shared helpers in `pipeline/utils/`. |
 | `configs/` | One JSON config per simulation run in the report. |
 | `pipeline-config/` | Browser-based config builder ([instructions](pipeline-config/instructions.md)). |
@@ -86,7 +86,7 @@ be restarted with the same command.
 To run a single config interactively instead:
 
 ```bash
-uv run python main.py
+uv run python setup.py
 ```
 
 Answer `y` at the first prompt and give the path to a config file. The
